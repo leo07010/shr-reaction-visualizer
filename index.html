@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SHR Database & Reaction Visualizer</title>
+<script src="https://unpkg.com/@rdkit/rdkit/dist/RDKit_minimal.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="loadingOverlay" class="loading-overlay">
+<div class="ld-spin"></div>
+<div style="color:var(--muted);font-size:15px">Loading RDKit Chemistry Engine...</div>
+</div>
+<div id="toastBox"></div>
+<nav>
+<div class="logo">SHR <span>Database</span></div>
+<div class="nav-links">
+<button class="nav-btn active" data-page="home">Home</button>
+<button class="nav-btn" data-page="visualizer">Visualizer</button>
+<button class="nav-btn" data-page="data">Database</button>
+</div>
+</nav>
+
+<!-- Home -->
+<div id="pg-home" class="page active">
+<div class="hero">
+<h1>Stepwise Homolytic Reaction <b>Database & Visualizer</b></h1>
+<p>Upload reaction data from Excel/CSV and visualize step-by-step bond breaking and forming processes with RDKit-powered molecular rendering.</p>
+<div class="hero-btns">
+<button class="btn-p" onclick="goPage('visualizer')">View Reactions</button>
+<button class="btn-s" onclick="goPage('data')">Explore Database</button>
+</div>
+</div>
+<div class="cards">
+<div class="card" onclick="goPage('visualizer')">
+<div class="card-icon">🔬</div>
+<h3>Reaction Visualizer</h3>
+<p>Upload Excel/CSV data to generate reaction overview diagrams and step-by-step mechanism flows. Annotate with circles, arrows, text, and bond highlighting.</p>
+</div>
+<div class="card" onclick="goPage('data')">
+<div class="card-icon">📊</div>
+<h3>Data Management</h3>
+<p>Search, filter, and review 644+ reaction entries. RDKit generates high-quality colored SVG structures from SMILES automatically.</p>
+</div>
+</div>
+<div class="stats-grid">
+<div class="stat-card"><div class="num" id="stat-entries">0</div><div class="label">Total Entries</div></div>
+<div class="stat-card"><div class="num" id="stat-refs">0</div><div class="label">References</div></div>
+<div class="stat-card"><div class="num" id="stat-people">0</div><div class="label">Contributors</div></div>
+<div class="stat-card"><div class="num" id="stat-bonds">0</div><div class="label">Bond Types</div></div>
+</div>
+</div>
+
+<!-- Visualizer -->
+<div id="pg-visualizer" class="page">
+<div class="visualizer-wrap">
+<!-- Left Sidebar: DOI List -->
+<div class="viz-sidebar">
+<h4>Reactions</h4>
+<input type="text" class="fr-input" id="vizSearch" placeholder="Search DOI..." oninput="VisualizerApp.filterDOIs()">
+<div class="viz-doi-list" id="doiList"></div>
+<div class="side-sep"></div>
+<h4>Upload Data</h4>
+<input type="file" id="csvUploadViz" accept=".csv,.xlsx,.xls" style="display:none" onchange="VisualizerApp.handleCSV(event)">
+<button class="rp-btn" onclick="document.getElementById('csvUploadViz').click()" style="margin-top:6px">📁 Load CSV / Excel</button>
+</div>
+
+<!-- Canvas Area -->
+<div class="viz-canvas-area">
+<!-- Toolbar -->
+<div class="viz-toolbar">
+<div class="viz-toolbar-group">
+<button class="viz-tb-btn" id="btnMarkFormed" onclick="VisualizerApp.toggleMarkMode('formed')" title="Click bonds in molecules to mark as Formed (green)">
+<span style="color:#00c48c;font-size:16px;line-height:1">●</span> Mark Formed
+</button>
+<button class="viz-tb-btn" id="btnMarkBroken" onclick="VisualizerApp.toggleMarkMode('broken')" title="Click bonds in molecules to mark as Broken (red)">
+<span style="color:#ff6b6b;font-size:16px;line-height:1">●</span> Mark Broken
+</button>
+<button class="viz-tb-btn" id="btnMarkClear" onclick="VisualizerApp.toggleMarkMode(null)" title="Exit marking mode">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18M21 3L3 21"/></svg>
+Clear Mode
+</button>
+<button class="viz-tb-btn" id="btnUndo" onclick="VisualizerApp.undoMark()" title="復原上一個標記動作 (Undo)">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+Undo
+</button>
+</div>
+<div class="viz-tb-sep"></div>
+<div class="viz-toolbar-group">
+<button class="viz-tb-btn" onclick="VisualizerApp.addTextNote()" title="Add Text Note">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="8" y1="20" x2="16" y2="20"/></svg>
+Text
+</button>
+<button class="viz-tb-btn" onclick="VisualizerApp.addArrowElement()" title="Add Arrow">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="14 7 19 12 14 17"/></svg>
+Arrow
+</button>
+<button class="viz-tb-btn" onclick="VisualizerApp.addCircleElement()" title="Add Circle Marker">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>
+Circle
+</button>
+</div>
+<div class="viz-tb-sep"></div>
+<div class="viz-toolbar-group">
+<button class="viz-tb-btn" onclick="VisualizerApp.zoomIn()" title="Zoom In">+</button>
+<span class="viz-zoom-label" id="zoomLabel">100%</span>
+<button class="viz-tb-btn" onclick="VisualizerApp.zoomOut()" title="Zoom Out">−</button>
+<button class="viz-tb-btn" onclick="VisualizerApp.resetView()" title="Reset View">Reset</button>
+</div>
+<div class="viz-tb-sep"></div>
+<div class="viz-toolbar-group">
+<button class="viz-tb-btn" onclick="VisualizerApp.clearCanvas()" title="Clear Canvas">
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+Clear
+</button>
+</div>
+<div style="flex:1"></div>
+<div class="viz-toolbar-group" style="color:var(--muted);font-size:11px">
+拖曳移動 · 邊緣縮放 · 點選兩個原子標記鍵結 · 拖曳空白區域選取
+</div>
+</div>
+
+<!-- Canvas Whiteboard -->
+<div class="viz-canvas" id="vizCanvas">
+<div class="viz-canvas-inner" id="vizCanvasInner">
+<!-- Draggable elements will be added here -->
+</div>
+<div class="viz-canvas-placeholder" id="vizPlaceholder">
+<div class="icon">🧪</div>
+<p>Select a reaction (Paper DOI) from the left panel to visualize the reaction pathway on this canvas</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Database -->
+<div id="pg-data" class="page">
+<div class="data-wrap">
+<div class="side">
+<h4>Data Actions</h4>
+<div class="fi" onclick="document.getElementById('csvUpload').click()"><span class="fi-icon">📁</span> Load CSV</div>
+<div class="fi" onclick="DataApp.exportCSV()"><span class="fi-icon">💾</span> Export CSV</div>
+<input type="file" id="csvUpload" accept=".csv" style="display:none" onchange="DataApp.handleCSV(event)">
+<div class="side-sep"></div>
+<h4>Statistics</h4>
+<div class="side-stat"><div class="label">Total Entries</div><div class="value" id="sideStatEntries">0</div></div>
+<div class="side-stat"><div class="label">Unique References</div><div class="value" id="sideStatRefs">0</div></div>
+<div class="side-stat"><div class="label">Contributors</div><div class="value" id="sideStatContributors">0</div></div>
+<div class="side-stat"><div class="label">Bond Types</div><div class="value" id="sideStatBonds">0</div></div>
+<div class="side-sep"></div>
+<h4>Filters</h4>
+<div class="rp-section" style="gap:8px;">
+<select class="fr-input" id="fltContributor" onchange="DataApp.applyFilters()"><option value="">All Contributors</option></select>
+<select class="fr-input" id="fltBond" onchange="DataApp.applyFilters()"><option value="">All Bond Types</option></select>
+<button class="rp-btn" onclick="DataApp.clearFilters()" style="padding:6px;font-size:12px;">Clear Filters</button>
+</div>
+</div>
+<div class="dm">
+<div class="topbar">
+<div class="sbox"><span>🔍</span><input type="text" id="searchInput" placeholder="Search DOI, SMILES, reagents..." onkeyup="DataApp.applyFilters()"></div>
+<div class="sbox" style="flex:0.6"><span>🧪</span><input type="text" id="searchSubstruct" placeholder="Substructure SMILES" onkeyup="DataApp.applyFilters()"></div>
+</div>
+<div class="dt">
+<table>
+<thead><tr>
+<th>#</th>
+<th onclick="DataApp.sort('Paper DOI')">Reference / DOI <span class="arrow">↕</span></th>
+<th onclick="DataApp.sort('Entered By')">By <span class="arrow">↕</span></th>
+<th onclick="DataApp.sort('Step')">Step <span class="arrow">↕</span></th>
+<th>SM</th><th>Product</th>
+<th>Bond Changes</th>
+<th>Reagents</th>
+</tr></thead>
+<tbody id="dataTable"></tbody>
+</table>
+</div>
+<div class="pagination" id="pagination"></div>
+</div>
+</div>
+</div>
+
+<!-- Detail Overlay -->
+<div class="detail-overlay" id="detailOverlay" onclick="if(event.target===this)this.classList.remove('on')">
+<div class="detail-modal">
+<div class="detail-header">
+<div><h2>Reaction Details</h2><div style="color:var(--accent);font-size:13px;margin-top:2px;font-family:monospace" id="detRef"></div></div>
+<button class="detail-close" onclick="document.getElementById('detailOverlay').classList.remove('on')">✕</button>
+</div>
+<div class="detail-body">
+<div class="detail-bond-legend">
+<span class="legend-item legend-broken"><span class="legend-dot"></span> Broken bonds (red)</span>
+<span class="legend-item legend-formed"><span class="legend-dot"></span> Formed bonds (green)</span>
+</div>
+<div class="detail-mol-pair">
+<div class="detail-mol-side"><h4>Starting Material <span style="font-size:10px;color:#cc2020;font-weight:400">(broken bonds highlighted)</span></h4><div class="detail-mol-img" id="detSmImg"></div></div>
+<div class="detail-mol-side"><h4>Product <span style="font-size:10px;color:#00994d;font-weight:400">(formed bonds highlighted)</span></h4><div class="detail-mol-img" id="detProdImg"></div></div>
+</div>
+<div class="prop-grid">
+<div class="prop-card"><div class="lb">Reference / DOI</div><div class="vl" id="detDoi" style="color:var(--accent)"></div></div>
+<div class="prop-card"><div class="lb">Entered By</div><div class="vl" id="detBy"></div></div>
+<div class="prop-card"><div class="lb">Step Number</div><div class="vl" id="detStep"></div></div>
+<div class="prop-card"><div class="lb">Reagents</div><div class="vl" id="detReagents"></div></div>
+</div>
+<div class="prop-grid" style="grid-template-columns:1fr 1fr;gap:20px;">
+<div><h4 style="font-size:12px;color:var(--muted);margin-bottom:6px">Bonds Formed</h4><div class="bond-list" id="detFormed"></div></div>
+<div><h4 style="font-size:12px;color:var(--muted);margin-bottom:6px">Bonds Broken</h4><div class="bond-list" id="detBroken"></div></div>
+</div>
+</div>
+</div>
+</div>
+
+<script src="chem-engine.js"></script>
+<script src="navigation.js"></script>
+<script src="visualizer-app.js"></script>
+<script src="data-app.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
