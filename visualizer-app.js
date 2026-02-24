@@ -603,11 +603,11 @@ const VisualizerApp = {
         bondState.bondItems.forEach((item, bi) => {
           const badgeClass = item.type === 'broken' ? 'bond-badge broken' : 'bond-badge';
           bondHTML += `<div class="cv-bond-item-row">
-            <input type="color" class="cv-bond-color" data-step="${stepKey}" data-idx="${bi}" value="${item.color}" title="變更顏色">
+            <input type="color" class="cv-bond-color" data-step="${stepKey}" data-idx="${bi}" value="${item.color}" title="Change color">
             <span class="${badgeClass} cv-bond-editable" style="border-color:${item.color};color:${item.color};background:${item.color}18">
               ${item.desc}
             </span>
-            <span class="cv-bond-remove" data-step="${stepKey}" data-idx="${bi}" title="移除">✕</span>
+            <span class="cv-bond-remove" data-step="${stepKey}" data-idx="${bi}" title="Remove">✕</span>
           </div>`;
         });
       } else {
@@ -616,8 +616,8 @@ const VisualizerApp = {
 
       // Add bond buttons
       bondHTML += `<div class="cv-bond-add-row">
-        <button class="cv-bond-add-btn" data-step="${stepKey}" data-type="formed" title="新增 Formed 鍵結">+ Formed</button>
-        <button class="cv-bond-add-btn cv-bond-add-broken" data-step="${stepKey}" data-type="broken" title="新增 Broken 鍵結">+ Broken</button>
+        <button class="cv-bond-add-btn" data-step="${stepKey}" data-type="formed" title="Add Formed bond">+ Formed</button>
+        <button class="cv-bond-add-btn cv-bond-add-broken" data-step="${stepKey}" data-type="broken" title="Add Broken bond">+ Broken</button>
       </div>`;
 
       if (autoDetected && (autoDetected.formed.length || autoDetected.broken.length)) {
@@ -669,7 +669,7 @@ const VisualizerApp = {
             const type = btn.dataset.type;
             const state = this._stepBondData[sk];
             if (!state) return;
-            const desc = prompt('輸入鍵結描述 (例: C-N, C=O, C-C):');
+            const desc = prompt('Enter bond descriptor (e.g. C-N, C=O, C-C):');
             if (!desc || !desc.trim()) return;
             const defaultColor = type === 'formed' ? '#00c48c' : '#ff6b6b';
             state.bondItems.push({ desc: desc.trim(), color: defaultColor, type });
@@ -978,7 +978,7 @@ const VisualizerApp = {
     document.querySelectorAll('.cv-atom-select-pending').forEach(el => el.remove());
 
     if (mode) {
-      toast(mode === 'formed' ? '點選兩個原子標記 FORMED 鍵結 (綠色)' : '點選兩個原子標記 BROKEN 鍵結 (紅色)', 'info');
+      toast(mode === 'formed' ? 'Click two atoms to mark FORMED bond (green)' : 'Click two atoms to mark BROKEN bond (red)', 'info');
     }
   },
 
@@ -996,7 +996,7 @@ const VisualizerApp = {
 
       const abData = box._atomBondData;
       if (!abData || !abData.atoms.length) {
-        toast('無法偵測此分子的原子位置', 'error');
+        toast('Unable to detect atom positions for this molecule', 'error');
         return;
       }
 
@@ -1034,7 +1034,7 @@ const VisualizerApp = {
 
         this._markFirstAtom = { atom: nearest, molBox: box, svgEl, abData };
         this._drawAtomHighlight(svgEl, nearest, 'pending');
-        toast(`已選取 ${nearest.element}(${nearest.idx + 1})，請點選第二個原子`, 'info');
+        toast(`Selected ${nearest.element}(${nearest.idx + 1}), click the second atom`, 'info');
         return;
       }
 
@@ -1135,8 +1135,8 @@ const VisualizerApp = {
 
       this._markFirstAtom = null;
       toast(bond
-        ? `已標記 ${first.element}-${second.element} 鍵結 (${mode === 'formed' ? '生成' : '斷裂'})`
-        : `已標記 ${first.element}, ${second.element} (${mode === 'formed' ? '生成' : '斷裂'})`, 'success');
+        ? `Marked ${first.element}-${second.element} bond (${mode === 'formed' ? 'formed' : 'broken'})`
+        : `Marked ${first.element}, ${second.element} (${mode === 'formed' ? 'formed' : 'broken'})`, 'success');
     });
   },
 
@@ -1178,7 +1178,7 @@ const VisualizerApp = {
   // ─── Undo last marking action ───
   undoMark() {
     if (!this.markHistory.length) {
-      toast('沒有可以復原的動作', 'info');
+      toast('Nothing to undo', 'info');
       return;
     }
     const last = this.markHistory.pop();
@@ -1187,7 +1187,7 @@ const VisualizerApp = {
       const el = last.svgEl.querySelector(`[data-mark-id="${id}"]`);
       if (el) el.remove();
     }
-    toast(`已復原: ${last.desc}`, 'success');
+    toast(`Undone: ${last.desc}`, 'success');
   },
 
   _viewCenter() {
