@@ -534,19 +534,70 @@ const VisualizerApp = {
 
     this.addElement({ type: 'molecule', x: cx, y: oy - 15, smiles: prodSmiles, width: MOL_W + 30, height: MOL_H + 30, label: 'Product' });
 
-    // ── Step-by-Step (Z-shaped rows) ──
+    // ── Step-by-Step with Checkbox Selection ──
     const startY = oy + MOL_H + 80;
+
+    // Initialize visible steps: default to last step only
+    if (!this._visibleSteps) this._visibleSteps = {};
+    if (!this._visibleSteps[doi]) {
+      this._visibleSteps[doi] = new Set([steps.length - 1]);
+    }
+    const visibleSet = this._visibleSteps[doi];
+
+    // Step selector checkboxes
+    let stepCheckboxHTML = '<div class="cv-step-selector"><span class="cv-step-selector-label">Show Steps:</span>';
+    steps.forEach((step, idx) => {
+      const checked = visibleSet.has(idx) ? 'checked' : '';
+      const stepNum = step['Step'] || (idx + 1);
+      stepCheckboxHTML += `<label class="cv-step-check"><input type="checkbox" data-step-idx="${idx}" ${checked}> Step ${stepNum}</label>`;
+    });
+    stepCheckboxHTML += `<button class="cv-step-all-btn" data-action="all">All</button>`;
+    stepCheckboxHTML += `<button class="cv-step-all-btn" data-action="last">Last Only</button>`;
+    stepCheckboxHTML += '</div>';
+
     this.addElement({
       type: 'label', x: MARGIN, y: startY,
-      html: '<div class="cv-section-title">Step-by-Step Mechanism</div>'
+      html: `<div class="cv-section-title">Step-by-Step Mechanism</div>${stepCheckboxHTML}`
     });
+
+    // Attach checkbox listeners
+    const self = this;
+    setTimeout(() => {
+      document.querySelectorAll('.cv-step-check input[type="checkbox"]').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const idx = parseInt(cb.dataset.stepIdx);
+          if (cb.checked) visibleSet.add(idx);
+          else visibleSet.delete(idx);
+          self.selectReaction(self.currentDOI);
+        });
+      });
+      document.querySelectorAll('.cv-step-all-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (btn.dataset.action === 'all') {
+            steps.forEach((_, i) => visibleSet.add(i));
+          } else {
+            visibleSet.clear();
+            visibleSet.add(steps.length - 1);
+          }
+          self.selectReaction(self.currentDOI);
+        });
+      });
+    }, 50);
 
     // Store editable bond data per step for re-rendering
     if (!this._stepBondData) this._stepBondData = {};
 
+    // Only render visible steps
+    const visibleSteps = steps.filter((_, idx) => visibleSet.has(idx));
+    let visibleIdx = 0;
+
     steps.forEach((step, idx) => {
-      const row = Math.floor(idx / COLS_PER_ROW);
-      const col = idx % COLS_PER_ROW;
+      // Skip steps not checked
+      if (!visibleSet.has(idx)) return;
+      const row = Math.floor(visibleIdx / COLS_PER_ROW);
+      const col = visibleIdx % COLS_PER_ROW;
+      visibleIdx++;
       const sx = MARGIN + col * STEP_BLOCK_W;
       const sy = startY + 50 + row * STEP_ROW_H;
 
@@ -706,9 +757,9 @@ const VisualizerApp = {
         });
       }
 
-      // Connector
-      if (idx < steps.length - 1) {
-        const nextCol = (idx + 1) % COLS_PER_ROW;
+      // Connector (only between visible steps)
+      if (visibleIdx < visibleSteps.length) {
+        const nextCol = visibleIdx % COLS_PER_ROW;
         if (nextCol > 0) {
           this.addElement({
             type: 'label', x: sx + STEP_BLOCK_W - 20, y: sy + 90,

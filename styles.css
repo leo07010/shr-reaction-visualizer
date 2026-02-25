@@ -171,6 +171,18 @@ font-size:10px;cursor:pointer;font-weight:600;transition:.15s}
 .cv-bond-add-btn.cv-bond-add-broken:hover{border-color:#ff6b6b;color:#ff6b6b;background:rgba(255,107,107,.06)}
 .cv-bond-source{font-size:9px;color:#aaa;font-style:italic;margin-top:1px}
 
+/* === Step Selector Checkboxes === */
+.cv-step-selector{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;padding:8px 12px;
+background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px}
+.cv-step-selector-label{font-size:12px;font-weight:600;color:var(--muted);margin-right:4px}
+.cv-step-check{display:flex;align-items:center;gap:3px;font-size:12px;color:var(--text);cursor:pointer;
+padding:3px 8px;border-radius:6px;transition:.15s;border:1px solid transparent}
+.cv-step-check:hover{background:rgba(0,180,216,.08);border-color:rgba(0,180,216,.2)}
+.cv-step-check input[type="checkbox"]{accent-color:var(--accent);cursor:pointer}
+.cv-step-all-btn{background:var(--card);border:1px solid var(--border);color:var(--muted);
+padding:3px 10px;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;transition:.15s}
+.cv-step-all-btn:hover{border-color:var(--accent);color:var(--accent)}
+
 /* === Draw Button === */
 .draw-btn{background:var(--card);border:1px solid var(--border);color:var(--accent);padding:6px 12px;
 border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;transition:.15s;white-space:nowrap}
@@ -187,6 +199,33 @@ width:90vw;height:85vh;max-width:1200px;display:flex;flex-direction:column;anima
 .ketcher-actions{display:flex;gap:8px;align-items:center}
 .ketcher-close{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:.15s}
 .ketcher-close:hover{color:var(--text);background:rgba(255,255,255,.06)}
+
+/* === Structure Search Page === */
+.search-wrap{display:flex;gap:24px;padding:24px;height:calc(100vh - 60px);overflow:hidden}
+.search-draw-panel{flex:0 0 55%;display:flex;flex-direction:column;gap:12px}
+.search-draw-panel h4{font-size:16px;font-weight:700;margin:0}
+.search-desc{font-size:13px;color:var(--muted);margin:0}
+.search-input-row{display:flex;gap:8px;align-items:center}
+.search-input-row .fr-input{flex:1}
+.search-ketcher-wrap{flex:1;min-height:300px}
+.search-actions{display:flex;gap:8px}
+.search-results-panel{flex:1;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.search-results-panel h4{font-size:16px;font-weight:700;margin:0}
+.search-results{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+.search-placeholder{color:var(--muted);font-size:13px;text-align:center;padding:40px 20px}
+.search-result-card{background:var(--card);border:1px solid var(--border);border-radius:10px;
+padding:12px;display:flex;gap:12px;align-items:center;cursor:pointer;transition:.15s}
+.search-result-card:hover{border-color:var(--accent);background:rgba(0,180,216,.04)}
+.search-result-mol{width:80px;height:80px;background:#fff;border-radius:6px;border:1px solid #e0e4ec;
+display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden}
+.search-result-mol svg{max-width:100%;max-height:100%}
+.search-result-info{flex:1;min-width:0}
+.search-result-doi{font-size:13px;font-weight:600;color:var(--accent);word-break:break-word}
+.search-result-smiles{font-size:11px;color:var(--muted);font-family:monospace;overflow:hidden;
+text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+.search-result-step{font-size:11px;color:var(--muted);margin-top:2px}
+.search-result-highlight{display:inline-block;background:rgba(0,180,216,.12);color:var(--accent);
+font-size:10px;padding:1px 6px;border-radius:4px;margin-top:4px}
 
 /* Reagent label */
 .cv-reagent{font-size:10px;color:#888;font-style:italic;text-align:center;

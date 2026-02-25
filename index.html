@@ -20,6 +20,7 @@
 <button class="nav-btn active" data-page="home">Home</button>
 <button class="nav-btn" data-page="visualizer">Visualizer</button>
 <button class="nav-btn" data-page="data">Database</button>
+<button class="nav-btn" data-page="search">Structure Search</button>
 </div>
 </nav>
 
@@ -179,6 +180,33 @@ Drag to move · Edge to resize · Click two atoms to mark bond · Drag blank are
 </table>
 </div>
 <div class="pagination" id="pagination"></div>
+</div>
+</div>
+</div>
+
+<!-- Structure Search Page -->
+<div id="pg-search" class="page">
+<div class="search-wrap">
+<div class="search-draw-panel">
+<h4>Draw Fragment / Substructure</h4>
+<p class="search-desc">Draw a molecular fragment below, then click "Search" to find all molecules in the database containing this substructure.</p>
+<div class="search-input-row">
+<input type="text" class="fr-input" id="searchSmilesInput" placeholder="Or type SMILES / SMARTS directly...">
+<button class="btn-p" onclick="StructureSearch.runSearch()">🔍 Search</button>
+</div>
+<div class="search-ketcher-wrap">
+<iframe id="searchKetcherFrame" src="" style="width:100%;height:400px;border:1px solid var(--border);border-radius:8px;background:#fff"></iframe>
+</div>
+<div class="search-actions">
+<button class="btn-s" onclick="StructureSearch.getFromKetcher()">Get SMILES from Editor</button>
+<button class="btn-s" onclick="StructureSearch.clearResults()">Clear Results</button>
+</div>
+</div>
+<div class="search-results-panel">
+<h4>Results <span id="searchResultCount" style="color:var(--accent);font-weight:400"></span></h4>
+<div class="search-results" id="searchResults">
+<div class="search-placeholder">Draw a molecular fragment and click "Search" to find matching molecules.</div>
+</div>
 </div>
 </div>
 </div>

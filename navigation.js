@@ -15,6 +15,9 @@ function goPage(name) {
     DataApp.renderTable();
     DataApp.updateStats();
   }
+  if (name === 'search' && typeof StructureSearch !== 'undefined') {
+    StructureSearch.loadKetcher();
+  }
 }
 
 document.querySelectorAll('.nav-btn').forEach(btn =>
