@@ -544,26 +544,23 @@ const VisualizerApp = {
     }
     const visibleSet = this._visibleSteps[doi];
 
-    // Step selector checkboxes
-    let stepCheckboxHTML = '<div class="cv-step-selector"><span class="cv-step-selector-label">Show Steps:</span>';
-    steps.forEach((step, idx) => {
-      const checked = visibleSet.has(idx) ? 'checked' : '';
-      const stepNum = step['Step'] || (idx + 1);
-      stepCheckboxHTML += `<label class="cv-step-check"><input type="checkbox" data-step-idx="${idx}" ${checked}> Step ${stepNum}</label>`;
-    });
-    stepCheckboxHTML += `<button class="cv-step-all-btn" data-action="all">All</button>`;
-    stepCheckboxHTML += `<button class="cv-step-all-btn" data-action="last">Last Only</button>`;
-    stepCheckboxHTML += '</div>';
+    // Step selector in fixed bar below toolbar
+    const stepBar = document.getElementById('stepSelectorBar');
+    if (stepBar) {
+      let barHTML = '<span class="cv-step-selector-label">Show Steps:</span>';
+      steps.forEach((step, idx) => {
+        const checked = visibleSet.has(idx) ? 'checked' : '';
+        const stepNum = step['Step'] || (idx + 1);
+        barHTML += `<label class="cv-step-check"><input type="checkbox" data-step-idx="${idx}" ${checked}> Step ${stepNum}</label>`;
+      });
+      barHTML += `<button class="cv-step-all-btn" data-action="all">All</button>`;
+      barHTML += `<button class="cv-step-all-btn" data-action="last">Last Only</button>`;
+      stepBar.innerHTML = barHTML;
+      stepBar.style.display = 'flex';
 
-    this.addElement({
-      type: 'label', x: MARGIN, y: startY,
-      html: `<div class="cv-section-title">Step-by-Step Mechanism</div>${stepCheckboxHTML}`
-    });
-
-    // Attach checkbox listeners
-    const self = this;
-    setTimeout(() => {
-      document.querySelectorAll('.cv-step-check input[type="checkbox"]').forEach(cb => {
+      // Attach checkbox listeners
+      const self = this;
+      stepBar.querySelectorAll('.cv-step-check input[type="checkbox"]').forEach(cb => {
         cb.addEventListener('change', () => {
           const idx = parseInt(cb.dataset.stepIdx);
           if (cb.checked) visibleSet.add(idx);
@@ -571,7 +568,7 @@ const VisualizerApp = {
           self.selectReaction(self.currentDOI);
         });
       });
-      document.querySelectorAll('.cv-step-all-btn').forEach(btn => {
+      stepBar.querySelectorAll('.cv-step-all-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
           e.stopPropagation();
           if (btn.dataset.action === 'all') {
@@ -583,7 +580,13 @@ const VisualizerApp = {
           self.selectReaction(self.currentDOI);
         });
       });
-    }, 50);
+    }
+
+    // Section title on canvas
+    this.addElement({
+      type: 'label', x: MARGIN, y: startY,
+      html: `<div class="cv-section-title">Step-by-Step Mechanism</div>`
+    });
 
     // Store editable bond data per step for re-rendering
     if (!this._stepBondData) this._stepBondData = {};

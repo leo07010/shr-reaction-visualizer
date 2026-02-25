@@ -176,7 +176,8 @@ const ChemEngine = {
         24:'Cr',25:'Mn',26:'Fe',27:'Co',28:'Ni',29:'Cu',30:'Zn',33:'As',34:'Se',35:'Br',46:'Pd',47:'Ag',
         50:'Sn',53:'I',78:'Pt',79:'Au',80:'Hg',82:'Pb',44:'Ru',45:'Rh',77:'Ir'};
 
-      const atomElements = atoms.map(a => ELEMENT_MAP[a.z] || `#${a.z}`);
+      // CommonChem JSON default: z=6 (Carbon) is omitted, so atoms without z are Carbon
+      const atomElements = atoms.map(a => ELEMENT_MAP[a.z || 6] || `#${a.z}`);
 
       const highlightBonds = [];
       const highlightBondColors = {};
@@ -194,47 +195,110 @@ const ChemEngine = {
       const GREEN = [0.0, 0.78, 0.45];
       const RED   = [0.92, 0.15, 0.15];
 
-      // Build unified bond list with per-bond colors
+      // Build unified bond list with per-bond colors + order info
       const allBondDescs = [];
       if (bondItems && bondItems.length) {
-        // New format: [{desc, color, type}]
         for (const item of bondItems) {
-          allBondDescs.push({ desc: item.desc, color: hexToRgb(item.color) });
+          // Strip atom indices from desc like "C(3)-N(7)" → "C-N" for matching
+          const cleanDesc = item.desc ? item.desc.replace(/\(\d+\)/g, '') : item.desc;
+          allBondDescs.push({ desc: cleanDesc, color: hexToRgb(item.color), order: item.order, type: item.type, rawColor: item.color });
         }
       } else {
-        // Legacy format: separate formed/broken arrays
         for (const d of (formedBonds || [])) allBondDescs.push({ desc: d, color: GREEN });
         for (const d of (brokenBonds || [])) allBondDescs.push({ desc: d, color: RED });
       }
 
+      // Track which atom belongs to which bond order (for numbered circles)
+      const atomBondOrderMap = {}; // atomIdx → {order, rawColor, type}
+
+      // Compute implicit H count per atom for X-H bond matching
+      // valence map: expected default valence for common elements
+      const VALENCE_MAP = { C:4, N:3, O:2, S:2, P:3, F:1, Cl:1, Br:1, I:1, Si:4, B:3, Se:2 };
+      const atomExplicitBondOrder = new Array(atoms.length).fill(0);
+      for (const b of bonds) {
+        const bo = b.bo || 1;
+        atomExplicitBondOrder[b.atoms[0]] += bo;
+        atomExplicitBondOrder[b.atoms[1]] += bo;
+      }
+      // Account for charges
+      const atomCharges = atoms.map(a => a.chg || 0);
+      const atomImplicitH = atoms.map((a, i) => {
+        const elem = atomElements[i];
+        const valence = VALENCE_MAP[elem];
+        if (!valence) return 0;
+        const charge = atomCharges[i];
+        const expected = valence - charge; // simplified: charge reduces available bonds
+        const implH = Math.max(0, expected - atomExplicitBondOrder[i]);
+        return implH;
+      });
+
       // Match each descriptor to molecule bonds
-      for (const item of allBondDescs) {
+      const matchedDescs = new Set(); // track which descriptors were matched
+
+      for (let di = 0; di < allBondDescs.length; di++) {
+        const item = allBondDescs[di];
         if (!item.desc) continue;
         const parsed = this._parseBondDescriptor(item.desc);
         if (!parsed) continue;
+        const involvesH = parsed.elem1 === 'H' || parsed.elem2 === 'H';
 
-        for (let bi = 0; bi < bonds.length; bi++) {
-          const bond = bonds[bi];
-          const aidx1 = bond.atoms[0];
-          const aidx2 = bond.atoms[1];
-          const elem1 = atomElements[aidx1];
-          const elem2 = atomElements[aidx2];
-          const bondOrder = bond.bo || 1;
+        if (involvesH) {
+          // ─── Implicit H bond matching ───
+          // Find the non-H element atom that has implicit hydrogens
+          const nonHElem = parsed.elem1 === 'H' ? parsed.elem2 : parsed.elem1;
+          let matched = false;
+          for (let ai = 0; ai < atomElements.length; ai++) {
+            if (atomElements[ai] !== nonHElem) continue;
+            if (atomImplicitH[ai] <= 0) continue;
+            // Check this atom isn't already used for the same descriptor type
+            const alreadyUsedForThis = Object.entries(atomBondOrderMap).some(
+              ([idx, info]) => parseInt(idx) === ai && info.order === item.order
+            );
+            if (alreadyUsedForThis) continue;
 
-          if (this._bondMatches(elem1, elem2, bondOrder, parsed)) {
-            if (!highlightBonds.includes(bi)) {
-              highlightBonds.push(bi);
-              highlightBondColors[bi] = item.color;
-              if (!highlightAtoms.includes(aidx1)) {
-                highlightAtoms.push(aidx1);
-                highlightAtomColors[aidx1] = item.color;
-              }
-              if (!highlightAtoms.includes(aidx2)) {
-                highlightAtoms.push(aidx2);
-                highlightAtomColors[aidx2] = item.color;
-              }
+            // Highlight this atom (no specific bond to highlight for X-H)
+            if (!highlightAtoms.includes(ai)) {
+              highlightAtoms.push(ai);
+              highlightAtomColors[ai] = item.color;
             }
+            if (item.order) {
+              atomBondOrderMap[ai] = { order: item.order, rawColor: item.rawColor, type: item.type };
+            }
+            matchedDescs.add(di);
+            atomImplicitH[ai]--; // consume one implicit H
+            matched = true;
             break;
+          }
+        } else {
+          // ─── Normal explicit bond matching ───
+          for (let bi = 0; bi < bonds.length; bi++) {
+            const bond = bonds[bi];
+            const aidx1 = bond.atoms[0];
+            const aidx2 = bond.atoms[1];
+            const elem1 = atomElements[aidx1];
+            const elem2 = atomElements[aidx2];
+            const bondOrder = bond.bo || 1;
+
+            if (this._bondMatches(elem1, elem2, bondOrder, parsed)) {
+              if (!highlightBonds.includes(bi)) {
+                highlightBonds.push(bi);
+                highlightBondColors[bi] = item.color;
+                if (!highlightAtoms.includes(aidx1)) {
+                  highlightAtoms.push(aidx1);
+                  highlightAtomColors[aidx1] = item.color;
+                }
+                if (!highlightAtoms.includes(aidx2)) {
+                  highlightAtoms.push(aidx2);
+                  highlightAtomColors[aidx2] = item.color;
+                }
+              }
+              if (item.order) {
+                atomBondOrderMap[aidx1] = { order: item.order, rawColor: item.rawColor, type: item.type };
+                atomBondOrderMap[aidx2] = { order: item.order, rawColor: item.rawColor, type: item.type };
+              }
+              matchedDescs.add(di);
+              break;
+            }
           }
         }
       }
@@ -248,28 +312,34 @@ const ChemEngine = {
         multipleBondOffset: 0.2
       };
 
-      if (highlightBonds.length > 0) {
-        details.bonds = highlightBonds;
-        details.highlightBondColors = highlightBondColors;
+      if (highlightBonds.length > 0 || highlightAtoms.length > 0) {
+        if (highlightBonds.length > 0) {
+          details.bonds = highlightBonds;
+          details.highlightBondColors = highlightBondColors;
+          details.highlightBondWidthMultiplier = 20;
+        }
         details.atoms = highlightAtoms;
         details.highlightAtomColors = highlightAtomColors;
         details.highlightAtomRadii = {};
         for (const ai of highlightAtoms) {
           details.highlightAtomRadii[ai] = 0.45;
         }
-        details.highlightBondWidthMultiplier = 20;
       }
 
       let svg = mol.get_svg_with_highlights(JSON.stringify(details));
 
       // Add legend overlay
-      if (highlightBonds.length > 0) {
+      if (highlightBonds.length > 0 || highlightAtoms.length > 0) {
         svg = this._addLegendToSvg(svg, formedBonds, brokenBonds, role);
       }
 
       // Add numbered circles on atoms for bondItems with order numbers
-      if (bondItems && bondItems.some(item => item.order)) {
-        svg = this._addNumberedAtomCircles(svg, smiles, bondItems);
+      if (Object.keys(atomBondOrderMap).length > 0) {
+        // Get precise atom positions from the SAME mol object
+        const atomPositions = this._getAtomPositionsFromMol(mol, atoms.length);
+        if (atomPositions) {
+          svg = this._addNumberedAtomCircles(svg, atomPositions, atomBondOrderMap);
+        }
       }
 
       return svg;
@@ -326,71 +396,151 @@ const ChemEngine = {
   },
 
   // ═══════════════════════════════════════════
-  //  Add numbered circles on atoms involved in each bond change
-  //  Shows order numbers (#1, #2...) with colored circles on each atom
+  //  Get precise atom positions by rendering a probe SVG with all atoms highlighted
+  //  Uses the SAME mol object to ensure coordinate consistency
+  //  Returns: [{idx, cx, cy}] or null
   // ═══════════════════════════════════════════
-  _addNumberedAtomCircles(svgStr, smiles, bondItems) {
-    if (!svgStr || !smiles || !bondItems) return svgStr;
+  _getAtomPositionsFromMol(mol, nAtoms) {
+    try {
+      // Render an SVG with ALL atoms highlighted as tiny dots — just to extract their screen positions
+      const allIdx = [];
+      const colors = {};
+      const radii = {};
+      for (let i = 0; i < nAtoms; i++) {
+        allIdx.push(i);
+        colors[i] = [0.95, 0.95, 0.95];
+        radii[i] = 0.25; // Same radius as getAtomBondData to ensure ellipses are rendered
+      }
+      const probeDetails = JSON.stringify({
+        clearBackground: false,
+        atoms: allIdx,
+        highlightAtomColors: colors,
+        highlightAtomRadii: radii,
+        bonds: [],
+        highlightBondColors: {}
+      });
+      const probeSvg = mol.get_svg_with_highlights(probeDetails);
+      if (!probeSvg) return null;
 
-    // Get atom positions from molecule
-    const abData = this.getAtomBondData(smiles);
-    if (!abData || !abData.atoms.length) return svgStr;
+      // Parse probe SVG to extract ellipse positions
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(probeSvg, 'image/svg+xml');
+      let ellipses = doc.querySelectorAll('ellipse');
+      // ellipses found for atom position extraction
 
-    const atoms = abData.atoms;
-    const molBonds = abData.bonds;
-    const vb = abData.viewBox;
-    const r = vb[2] * 0.032; // circle radius
+      if (ellipses.length < nAtoms) {
+        // Fallback: try molblock coordinate mapping
+        return this._getAtomCoordsViaMolblock(mol, nAtoms, probeSvg);
+      }
+
+      const positions = [];
+      for (let i = 0; i < Math.min(ellipses.length, nAtoms); i++) {
+        positions.push({
+          idx: i,
+          cx: parseFloat(ellipses[i].getAttribute('cx')),
+          cy: parseFloat(ellipses[i].getAttribute('cy'))
+        });
+      }
+      return positions;
+    } catch (e) {
+      console.warn('_getAtomPositionsFromMol failed:', e);
+      return null;
+    }
+  },
+
+  // Fallback: extract coordinates from molblock and map to SVG viewport
+  _getAtomCoordsViaMolblock(mol, nAtoms, referenceSvg) {
+    try {
+      const mb = mol.get_molblock();
+      if (!mb) return null;
+
+      const lines = mb.split('\n');
+      const nAtomsFromMol = parseInt(lines[3].substring(0, 3).trim());
+      const molCoords = [];
+      for (let i = 0; i < Math.min(nAtomsFromMol, nAtoms); i++) {
+        const al = lines[4 + i];
+        if (!al) continue;
+        molCoords.push({
+          x: parseFloat(al.substring(0, 10).trim()),
+          y: parseFloat(al.substring(10, 20).trim())
+        });
+      }
+      if (molCoords.length < nAtoms) return null;
+
+      // Get SVG viewBox
+      const vbMatch = referenceSvg.match(/viewBox=['"]([\d.\s,eE+-]+)['"]/);
+      if (!vbMatch) return null;
+      const vb = vbMatch[1].split(/[\s,]+/).map(Number);
+      const svgW = vb[2], svgH = vb[3];
+
+      // Map mol coords to SVG space
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const c of molCoords) {
+        if (c.x < minX) minX = c.x;
+        if (c.x > maxX) maxX = c.x;
+        if (c.y < minY) minY = c.y;
+        if (c.y > maxY) maxY = c.y;
+      }
+      const molW = maxX - minX || 1;
+      const molH = maxY - minY || 1;
+      const padding = 0.12;
+      const usableW = svgW * (1 - 2 * padding);
+      const usableH = svgH * (1 - 2 * padding);
+      const scale = Math.min(usableW / molW, usableH / molH);
+      const cx0 = (minX + maxX) / 2;
+      const cy0 = (minY + maxY) / 2;
+
+      const positions = [];
+      for (let i = 0; i < nAtoms; i++) {
+        positions.push({
+          idx: i,
+          cx: svgW / 2 + (molCoords[i].x - cx0) * scale,
+          cy: svgH / 2 - (molCoords[i].y - cy0) * scale
+        });
+      }
+      return positions;
+    } catch (e) {
+      console.warn('_getAtomCoordsViaMolblock failed:', e);
+      return null;
+    }
+  },
+
+  // ═══════════════════════════════════════════
+  //  Add numbered circles on atoms involved in each bond change
+  //  atomPositions: [{idx, cx, cy}] from _getAtomPositionsFromMol
+  //  atomBondOrderMap: { atomIdx: {order, rawColor, type} }
+  // ═══════════════════════════════════════════
+  _addNumberedAtomCircles(svgStr, atomPositions, atomBondOrderMap) {
+    if (!svgStr || !atomPositions || !atomBondOrderMap) return svgStr;
+    if (Object.keys(atomBondOrderMap).length === 0) return svgStr;
+
+    // Get viewBox for sizing
+    const vbMatch = svgStr.match(/viewBox=['"]([\d.\s,eE+-]+)['"]/);
+    const vb = vbMatch ? vbMatch[1].split(/[\s,]+/).map(Number) : [0, 0, 250, 200];
+    const r = vb[2] * 0.04; // circle radius relative to SVG width
 
     let circles = '';
-    const processedKeys = new Set(); // avoid duplicate circles on same atom for same order
+    const processedAtoms = new Set();
 
-    for (const item of bondItems) {
-      if (!item.order || !item.desc) continue;
+    for (const [atomIdxStr, info] of Object.entries(atomBondOrderMap)) {
+      const atomIdx = parseInt(atomIdxStr);
+      if (!info || !info.order) continue;
+      if (processedAtoms.has(atomIdx)) continue;
+      processedAtoms.add(atomIdx);
 
-      // Handle descriptors with atom indices like "C(3)-N(7)"
-      const descClean = item.desc.replace(/\(\d+\)/g, '');
-      const parsed = this._parseBondDescriptor(descClean);
-      if (!parsed) continue;
+      const pos = atomPositions[atomIdx];
+      if (!pos) continue;
 
-      const isFormed = item.type === 'formed';
-      const color = item.color || (isFormed ? '#00c48c' : '#ff6b6b');
-      const fillColor = isFormed ? 'rgba(0,196,140,0.25)' : 'rgba(255,107,107,0.25)';
+      const isFormed = info.type === 'formed';
+      const strokeColor = info.rawColor || (isFormed ? '#00c48c' : '#ff6b6b');
+      const fillColor = isFormed ? 'rgba(0,196,140,0.35)' : 'rgba(255,107,107,0.35)';
 
-      // If atomIdx is provided, use those directly
-      if (item.atomIdx && item.atomIdx.length === 2) {
-        const a1 = atoms[item.atomIdx[0]];
-        const a2 = atoms[item.atomIdx[1]];
-        for (const atom of [a1, a2]) {
-          if (!atom) continue;
-          const key = `${atom.idx}_${item.order}`;
-          if (processedKeys.has(key)) continue;
-          processedKeys.add(key);
-          circles += `<circle cx="${atom.cx}" cy="${atom.cy}" r="${r}" fill="${fillColor}" stroke="${color}" stroke-width="1.8" opacity="0.9"/>`;
-          circles += `<text x="${atom.cx}" y="${atom.cy + r * 0.38}" text-anchor="middle" font-size="${r * 1.4}" font-weight="800" font-family="sans-serif" fill="${color}">${item.order}</text>`;
-        }
-        continue;
-      }
+      // Offset to top-right of atom position
+      const ncx = pos.cx + r * 0.9;
+      const ncy = pos.cy - r * 0.9;
 
-      // Otherwise match by bond descriptor
-      for (const b of molBonds) {
-        const e1 = atoms[b.a1]?.element;
-        const e2 = atoms[b.a2]?.element;
-        if (!e1 || !e2) continue;
-
-        if (this._bondMatches(e1, e2, b.bo || 1, parsed)) {
-          const a1 = atoms[b.a1];
-          const a2 = atoms[b.a2];
-          for (const atom of [a1, a2]) {
-            if (!atom) continue;
-            const key = `${atom.idx}_${item.order}`;
-            if (processedKeys.has(key)) continue;
-            processedKeys.add(key);
-            circles += `<circle cx="${atom.cx}" cy="${atom.cy}" r="${r}" fill="${fillColor}" stroke="${color}" stroke-width="1.8" opacity="0.9"/>`;
-            circles += `<text x="${atom.cx}" y="${atom.cy + r * 0.38}" text-anchor="middle" font-size="${r * 1.4}" font-weight="800" font-family="sans-serif" fill="${color}">${item.order}</text>`;
-          }
-          break; // matched first bond
-        }
-      }
+      circles += `<circle cx="${ncx.toFixed(1)}" cy="${ncy.toFixed(1)}" r="${r.toFixed(1)}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="2.5"/>`;
+      circles += `<text x="${ncx.toFixed(1)}" y="${(ncy + r * 0.4).toFixed(1)}" text-anchor="middle" font-size="${(r * 1.5).toFixed(1)}" font-weight="900" font-family="Arial,sans-serif" fill="${strokeColor}">${info.order}</text>`;
     }
 
     if (!circles) return svgStr;
@@ -507,8 +657,8 @@ const ChemEngine = {
         // Build a multiset of bond descriptors "ELEM1{sym}ELEM2" (sorted alphabetically)
         const bondMap = new Map(); // "C-N" → count
         for (const b of bonds) {
-          const e1 = ELEMENT_MAP[atoms[b.atoms[0]]?.z] || '?';
-          const e2 = ELEMENT_MAP[atoms[b.atoms[1]]?.z] || '?';
+          const e1 = ELEMENT_MAP[atoms[b.atoms[0]]?.z || 6] || '?';
+          const e2 = ELEMENT_MAP[atoms[b.atoms[1]]?.z || 6] || '?';
           const order = b.bo || 1;
           const sym = ORDER_SYM[order] || '-';
           // Sort elements alphabetically so C-N == N-C
@@ -608,7 +758,7 @@ const ChemEngine = {
           idx: i,
           cx: parseFloat(el.getAttribute('cx')),
           cy: parseFloat(el.getAttribute('cy')),
-          element: ELEMENT_MAP[atoms[i].z] || '?'
+          element: ELEMENT_MAP[atoms[i].z || 6] || '?'
         });
       }
 
@@ -657,7 +807,7 @@ const ChemEngine = {
                   idx: i,
                   cx: offsetX + (coords[i].x - cx0) * scale,
                   cy: offsetY - (coords[i].y - cy0) * scale, // Y is flipped
-                  element: ELEMENT_MAP[atoms[i].z] || '?'
+                  element: ELEMENT_MAP[atoms[i].z || 6] || '?'
                 });
               }
             }

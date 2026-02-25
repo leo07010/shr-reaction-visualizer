@@ -11,6 +11,9 @@ function goPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('pg-' + name).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.page === name));
+  // Hide step selector bar when not on visualizer page
+  const stepBar = document.getElementById('stepSelectorBar');
+  if (stepBar && name !== 'viz') stepBar.style.display = 'none';
   if (name === 'data') {
     DataApp.renderTable();
     DataApp.updateStats();
