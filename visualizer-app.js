@@ -568,15 +568,15 @@ const VisualizerApp = {
         broken = autoDetected.broken;
       }
 
-      // Store editable state - each bond is {desc, color}
+      // Store editable state - each bond is {desc, color, type, order, atomIdx}
       const stepKey = `${doi}_step${idx}`;
       if (!this._stepBondData[stepKey]) {
+        const combined = [
+          ...formed.map(d => ({ desc: d, color: '#00c48c', type: 'formed' })),
+          ...broken.map(d => ({ desc: d, color: '#ff6b6b', type: 'broken' }))
+        ];
         this._stepBondData[stepKey] = {
-          // bondItems: unified array of {desc, color, type}
-          bondItems: [
-            ...formed.map(d => ({ desc: d, color: '#00c48c', type: 'formed' })),
-            ...broken.map(d => ({ desc: d, color: '#ff6b6b', type: 'broken' }))
-          ]
+          bondItems: combined.map((item, i) => ({ ...item, order: i + 1, atomIdx: null }))
         };
       }
       const bondState = this._stepBondData[stepKey];
@@ -591,7 +591,8 @@ const VisualizerApp = {
       this.addElement({
         type: 'molecule', x: sx, y: sy + 36,
         smiles: smSmi, width: 140, height: 140,
-        bondItems: bondState.bondItems, molRole: 'sm'
+        bondItems: bondState.bondItems, molRole: 'sm',
+        stepKey
       });
 
       // Bond changes column with edit controls + color pickers
@@ -602,11 +603,16 @@ const VisualizerApp = {
       if (bondState.bondItems.length) {
         bondState.bondItems.forEach((item, bi) => {
           const badgeClass = item.type === 'broken' ? 'bond-badge broken' : 'bond-badge';
+          const orderNum = item.order || (bi + 1);
+          const typeLabel = item.type === 'broken' ? 'break' : 'form';
+          const atomInfo = item.atomIdx ? ` [${item.atomIdx[0]},${item.atomIdx[1]}]` : '';
           bondHTML += `<div class="cv-bond-item-row">
             <input type="color" class="cv-bond-color" data-step="${stepKey}" data-idx="${bi}" value="${item.color}" title="Change color">
+            <span class="cv-bond-order">#${orderNum}</span>
             <span class="${badgeClass} cv-bond-editable" style="border-color:${item.color};color:${item.color};background:${item.color}18">
-              ${item.desc}
+              ${item.desc}${atomInfo}
             </span>
+            <span class="cv-bond-type-label cv-bond-type-${item.type}">${typeLabel}</span>
             <span class="cv-bond-remove" data-step="${stepKey}" data-idx="${bi}" title="Remove">✕</span>
           </div>`;
         });
@@ -672,7 +678,8 @@ const VisualizerApp = {
             const desc = prompt('Enter bond descriptor (e.g. C-N, C=O, C-C):');
             if (!desc || !desc.trim()) return;
             const defaultColor = type === 'formed' ? '#00c48c' : '#ff6b6b';
-            state.bondItems.push({ desc: desc.trim(), color: defaultColor, type });
+            const nextOrder = state.bondItems.length + 1;
+            state.bondItems.push({ desc: desc.trim(), color: defaultColor, type, order: nextOrder, atomIdx: null });
             this.selectReaction(this.currentDOI);
           });
         });
@@ -682,7 +689,8 @@ const VisualizerApp = {
       this.addElement({
         type: 'molecule', x: sx + 310, y: sy + 36,
         smiles: prodSmi, width: 140, height: 140,
-        bondItems: bondState.bondItems, molRole: 'product'
+        bondItems: bondState.bondItems, molRole: 'product',
+        stepKey
       });
 
       // Reagents label
@@ -715,7 +723,7 @@ const VisualizerApp = {
   //  Create draggable + resizable element
   // ═══════════════════════════════════════════
   // bondItems: [{desc, color, type}] for custom per-bond colors
-  addElement({ type, x, y, html, smiles, width, height, label, formedBonds, brokenBonds, molRole, bondItems }) {
+  addElement({ type, x, y, html, smiles, width, height, label, formedBonds, brokenBonds, molRole, bondItems, stepKey }) {
     const inner = document.getElementById('vizCanvasInner');
     if (!inner) return;
 
@@ -778,6 +786,9 @@ const VisualizerApp = {
       }
 
       this.makeResizable(el, box, smiles, formedBonds, brokenBonds, molRole, bondItems);
+
+      // Store stepKey on box for bond marking
+      box._stepKey = stepKey || null;
 
       // Bond marking click handler
       this._setupBondMarking(el, box, smiles);
@@ -1062,6 +1073,26 @@ const VisualizerApp = {
       const glowColor = mode === 'formed' ? 'rgba(0,196,140,0.4)' : 'rgba(255,107,107,0.4)';
       const overlayIds = [];
 
+      // Build bond descriptor with atom indices
+      const bondDesc = bond
+        ? `${first.element}(${first.idx})-${second.element}(${second.idx})`
+        : `${first.element}(${first.idx}),${second.element}(${second.idx})`;
+      const atomIdx = [first.idx, second.idx];
+
+      // Add to _stepBondData if stepKey is available
+      const stepKey = box._stepKey;
+      let orderNum = null;
+      if (stepKey && this._stepBondData && this._stepBondData[stepKey]) {
+        const state = this._stepBondData[stepKey];
+        orderNum = state.bondItems.length + 1;
+        state.bondItems.push({
+          desc: bondDesc, color, type: mode,
+          order: orderNum, atomIdx
+        });
+      }
+
+      const labelText = orderNum ? `#${orderNum}` : (mode === 'formed' ? 'F' : 'B');
+
       if (bond) {
         // ── Adjacent atoms → highlight the BOND between them ──
         const id1 = this._addSvgOverlay(svgEl, 'circle', {
@@ -1072,7 +1103,6 @@ const VisualizerApp = {
           cx: second.cx, cy: second.cy, r: vb[2] * 0.025,
           fill: glowColor, stroke: color, 'stroke-width': 1.5
         });
-        // Draw a thick line between the two atoms
         const id3 = this._addSvgOverlay(svgEl, 'line', {
           x1: first.cx, y1: first.cy, x2: second.cx, y2: second.cy,
           stroke: color, 'stroke-width': vb[2] * 0.02,
@@ -1080,10 +1110,9 @@ const VisualizerApp = {
         });
         overlayIds.push(id1, id2, id3);
 
-        // Add label near midpoint
+        // Label with order number near midpoint
         const mx = (first.cx + second.cx) / 2;
         const my = (first.cy + second.cy) / 2;
-        const labelText = mode === 'formed' ? 'F' : 'B';
         const id4 = this._addSvgOverlay(svgEl, 'text', {
           x: mx, y: my - vb[3] * 0.03,
           'text-anchor': 'middle', 'font-size': vb[2] * 0.04,
@@ -1093,7 +1122,7 @@ const VisualizerApp = {
         overlayIds.push(id4);
 
       } else {
-        // ── Non-adjacent atoms → mark each atom individually ──
+        // ── Non-adjacent atoms → mark each individually ──
         const r = vb[2] * 0.035;
         const id1 = this._addSvgOverlay(svgEl, 'circle', {
           cx: first.cx, cy: first.cy, r,
@@ -1105,38 +1134,33 @@ const VisualizerApp = {
         });
         overlayIds.push(id1, id2);
 
-        // Add element labels
+        // Labels with atom index
         const id3 = this._addSvgOverlay(svgEl, 'text', {
           x: first.cx, y: first.cy - r - 2,
           'text-anchor': 'middle', 'font-size': vb[2] * 0.035,
           'font-weight': '600', 'font-family': 'sans-serif',
-          fill: color, _text: first.element
+          fill: color, _text: `${first.element}(${first.idx})`
         });
         const id4 = this._addSvgOverlay(svgEl, 'text', {
           x: second.cx, y: second.cy - r - 2,
           'text-anchor': 'middle', 'font-size': vb[2] * 0.035,
           'font-weight': '600', 'font-family': 'sans-serif',
-          fill: color, _text: second.element
+          fill: color, _text: `${second.element}(${second.idx})`
         });
         overlayIds.push(id3, id4);
       }
 
-      // Push to undo stack
+      // Push to undo stack with stepKey for _stepBondData removal
       this.markHistory.push({
         type: bond ? 'bond' : 'atoms',
-        svgEl,
-        overlayIds,
-        mode,
-        box,
-        desc: bond
-          ? `${first.element}-${second.element} (${mode})`
-          : `${first.element}, ${second.element} (${mode})`
+        svgEl, overlayIds, mode, box,
+        stepKey: stepKey || null,
+        desc: bondDesc
       });
 
       this._markFirstAtom = null;
-      toast(bond
-        ? `Marked ${first.element}-${second.element} bond (${mode === 'formed' ? 'formed' : 'broken'})`
-        : `Marked ${first.element}, ${second.element} (${mode === 'formed' ? 'formed' : 'broken'})`, 'success');
+      const toastMsg = orderNum ? `#${orderNum} ${bondDesc} (${mode})` : `${bondDesc} (${mode})`;
+      toast(`Marked ${toastMsg}`, 'success');
     });
   },
 
@@ -1182,10 +1206,21 @@ const VisualizerApp = {
       return;
     }
     const last = this.markHistory.pop();
-    // Remove all overlay elements for this action
+    // Remove all SVG overlay elements for this action
     for (const id of last.overlayIds) {
       const el = last.svgEl.querySelector(`[data-mark-id="${id}"]`);
       if (el) el.remove();
+    }
+    // Also remove from _stepBondData if it was added there
+    if (last.stepKey && this._stepBondData && this._stepBondData[last.stepKey]) {
+      const items = this._stepBondData[last.stepKey].bondItems;
+      // Remove the last item that matches this desc
+      for (let i = items.length - 1; i >= 0; i--) {
+        if (items[i].desc === last.desc && items[i].type === last.mode) {
+          items.splice(i, 1);
+          break;
+        }
+      }
     }
     toast(`Undone: ${last.desc}`, 'success');
   },

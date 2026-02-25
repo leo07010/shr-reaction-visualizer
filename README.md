@@ -1,6 +1,6 @@
 # SHR Reaction Visualizer
 
-A web-based tool for visualizing stepwise homolytic reactions (SHR). Built with RDKit.js for SMILES-to-SVG molecular rendering, featuring an interactive canvas whiteboard for annotating reaction mechanisms.
+A web-based tool for visualizing stepwise heterolytic reactions (SHR). Built with RDKit.js for SMILES-to-SVG molecular rendering, featuring an interactive canvas whiteboard for annotating reaction mechanisms.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 

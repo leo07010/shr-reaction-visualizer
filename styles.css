@@ -157,7 +157,11 @@ border-radius:14px;text-align:center;white-space:nowrap}
 background:none;flex-shrink:0;-webkit-appearance:none;appearance:none}
 .cv-bond-color::-webkit-color-swatch-wrapper{padding:1px}
 .cv-bond-color::-webkit-color-swatch{border:none;border-radius:2px}
+.cv-bond-order{font-size:10px;font-weight:700;color:#888;flex-shrink:0;min-width:18px}
 .cv-bond-editable{cursor:default;font-size:11px}
+.cv-bond-type-label{font-size:9px;font-weight:600;padding:1px 4px;border-radius:3px;flex-shrink:0;text-transform:uppercase}
+.cv-bond-type-formed{color:#00c48c;background:rgba(0,196,140,.12)}
+.cv-bond-type-broken{color:#ff6b6b;background:rgba(255,107,107,.12)}
 .cv-bond-remove{font-size:10px;cursor:pointer;color:#ccc;font-weight:700;line-height:1;transition:.15s;flex-shrink:0}
 .cv-bond-remove:hover{color:#ff4444}
 .cv-bond-add-row{display:flex;gap:4px;margin-top:3px}
