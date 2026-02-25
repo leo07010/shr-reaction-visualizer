@@ -124,5 +124,55 @@ const DataApp = {
     a.download='SHR_Database_Export.csv';
     document.body.appendChild(a);a.click();document.body.removeChild(a);
     toast('Exported successfully','success');
+  },
+
+  // ─── Ketcher Molecular Editor Integration ───
+  openKetcher() {
+    const overlay = document.getElementById('ketcherOverlay');
+    const frame = document.getElementById('ketcherFrame');
+    if (!overlay || !frame) return;
+    // Load Ketcher from CDN (standalone build)
+    if (!frame.src || frame.src === '' || frame.src === window.location.href) {
+      frame.src = 'https://unpkg.com/ketcher-standalone@2.26.0/dist/index.html';
+    }
+    overlay.classList.add('on');
+  },
+
+  closeKetcher() {
+    const overlay = document.getElementById('ketcherOverlay');
+    if (overlay) overlay.classList.remove('on');
+  },
+
+  async useKetcherSmiles() {
+    const frame = document.getElementById('ketcherFrame');
+    if (!frame || !frame.contentWindow) {
+      toast('Ketcher is not loaded yet', 'error');
+      return;
+    }
+    try {
+      const ketcher = frame.contentWindow.ketcher;
+      if (!ketcher) {
+        toast('Ketcher API not available. Try using SMILES input directly.', 'error');
+        return;
+      }
+      // Get SMILES from Ketcher
+      let smiles = '';
+      if (ketcher.getSmiles) {
+        smiles = await ketcher.getSmiles();
+      } else if (ketcher.editor && ketcher.editor.struct) {
+        smiles = ketcher.editor.struct().toSmiles();
+      }
+      if (smiles && smiles.trim()) {
+        document.getElementById('searchSubstruct').value = smiles.trim();
+        this.applyFilters();
+        this.closeKetcher();
+        toast(`Searching substructure: ${smiles.trim()}`, 'success');
+      } else {
+        toast('No structure drawn. Please draw a molecule first.', 'info');
+      }
+    } catch (e) {
+      console.warn('Ketcher API error:', e);
+      toast('Could not get SMILES from Ketcher. Try copying SMILES manually.', 'error');
+    }
   }
 };

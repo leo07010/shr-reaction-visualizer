@@ -267,6 +267,11 @@ const ChemEngine = {
         svg = this._addLegendToSvg(svg, formedBonds, brokenBonds, role);
       }
 
+      // Add numbered circles on atoms for bondItems with order numbers
+      if (bondItems && bondItems.some(item => item.order)) {
+        svg = this._addNumberedAtomCircles(svg, smiles, bondItems);
+      }
+
       return svg;
     } catch(e) {
       console.warn('Bond highlighting failed:', e);
@@ -318,6 +323,78 @@ const ChemEngine = {
       return false;
     }
     return true; // order 0 = match any
+  },
+
+  // ═══════════════════════════════════════════
+  //  Add numbered circles on atoms involved in each bond change
+  //  Shows order numbers (#1, #2...) with colored circles on each atom
+  // ═══════════════════════════════════════════
+  _addNumberedAtomCircles(svgStr, smiles, bondItems) {
+    if (!svgStr || !smiles || !bondItems) return svgStr;
+
+    // Get atom positions from molecule
+    const abData = this.getAtomBondData(smiles);
+    if (!abData || !abData.atoms.length) return svgStr;
+
+    const atoms = abData.atoms;
+    const molBonds = abData.bonds;
+    const vb = abData.viewBox;
+    const r = vb[2] * 0.032; // circle radius
+
+    let circles = '';
+    const processedKeys = new Set(); // avoid duplicate circles on same atom for same order
+
+    for (const item of bondItems) {
+      if (!item.order || !item.desc) continue;
+
+      // Handle descriptors with atom indices like "C(3)-N(7)"
+      const descClean = item.desc.replace(/\(\d+\)/g, '');
+      const parsed = this._parseBondDescriptor(descClean);
+      if (!parsed) continue;
+
+      const isFormed = item.type === 'formed';
+      const color = item.color || (isFormed ? '#00c48c' : '#ff6b6b');
+      const fillColor = isFormed ? 'rgba(0,196,140,0.25)' : 'rgba(255,107,107,0.25)';
+
+      // If atomIdx is provided, use those directly
+      if (item.atomIdx && item.atomIdx.length === 2) {
+        const a1 = atoms[item.atomIdx[0]];
+        const a2 = atoms[item.atomIdx[1]];
+        for (const atom of [a1, a2]) {
+          if (!atom) continue;
+          const key = `${atom.idx}_${item.order}`;
+          if (processedKeys.has(key)) continue;
+          processedKeys.add(key);
+          circles += `<circle cx="${atom.cx}" cy="${atom.cy}" r="${r}" fill="${fillColor}" stroke="${color}" stroke-width="1.8" opacity="0.9"/>`;
+          circles += `<text x="${atom.cx}" y="${atom.cy + r * 0.38}" text-anchor="middle" font-size="${r * 1.4}" font-weight="800" font-family="sans-serif" fill="${color}">${item.order}</text>`;
+        }
+        continue;
+      }
+
+      // Otherwise match by bond descriptor
+      for (const b of molBonds) {
+        const e1 = atoms[b.a1]?.element;
+        const e2 = atoms[b.a2]?.element;
+        if (!e1 || !e2) continue;
+
+        if (this._bondMatches(e1, e2, b.bo || 1, parsed)) {
+          const a1 = atoms[b.a1];
+          const a2 = atoms[b.a2];
+          for (const atom of [a1, a2]) {
+            if (!atom) continue;
+            const key = `${atom.idx}_${item.order}`;
+            if (processedKeys.has(key)) continue;
+            processedKeys.add(key);
+            circles += `<circle cx="${atom.cx}" cy="${atom.cy}" r="${r}" fill="${fillColor}" stroke="${color}" stroke-width="1.8" opacity="0.9"/>`;
+            circles += `<text x="${atom.cx}" y="${atom.cy + r * 0.38}" text-anchor="middle" font-size="${r * 1.4}" font-weight="800" font-family="sans-serif" fill="${color}">${item.order}</text>`;
+          }
+          break; // matched first bond
+        }
+      }
+    }
+
+    if (!circles) return svgStr;
+    return svgStr.replace('</svg>', `<g class="bond-number-overlays">${circles}</g></svg>`);
   },
 
   // Add a small legend overlay at the bottom of the SVG

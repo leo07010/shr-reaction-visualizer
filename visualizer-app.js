@@ -550,33 +550,38 @@ const VisualizerApp = {
       const sx = MARGIN + col * STEP_BLOCK_W;
       const sy = startY + 50 + row * STEP_ROW_H;
 
-      // Get bond change data: prefer data fields, then auto-detect
-      let formed = this.getBondChanges(step, 'Formed');
-      let broken = this.getBondChanges(step, 'Broken');
-
-      // Auto-detect bond changes from SMILES comparison
-      let autoDetected = null;
+      // Get bond changes in alternating CSV order: Formed 1, Broken 1, Formed 2, Broken 2...
       const smSmi = step['SMILES SM'];
       const prodSmi = step['SMILES Product'];
-      if (smSmi && prodSmi) {
+
+      // Read bonds in alternating order from CSV columns
+      let alternatingBonds = [];
+      for (let i = 1; i <= 8; i++) {
+        const f = step[`Formed ${i}`];
+        const b = step[`Broken ${i}`];
+        if (f && f.trim()) alternatingBonds.push({ desc: f.trim(), color: '#00c48c', type: 'formed' });
+        if (b && b.trim()) alternatingBonds.push({ desc: b.trim(), color: '#ff6b6b', type: 'broken' });
+      }
+
+      // Auto-detect bond changes from SMILES comparison if no manual data
+      let autoDetected = null;
+      if (!alternatingBonds.length && smSmi && prodSmi) {
         autoDetected = ChemEngine.detectBondChanges(smSmi, prodSmi);
+        if (autoDetected) {
+          // Interleave auto-detected: formed first, then broken alternating
+          const maxLen = Math.max(autoDetected.formed.length, autoDetected.broken.length);
+          for (let i = 0; i < maxLen; i++) {
+            if (i < autoDetected.formed.length) alternatingBonds.push({ desc: autoDetected.formed[i], color: '#00c48c', type: 'formed' });
+            if (i < autoDetected.broken.length) alternatingBonds.push({ desc: autoDetected.broken[i], color: '#ff6b6b', type: 'broken' });
+          }
+        }
       }
 
-      // If no manual data, use auto-detected
-      if (!formed.length && !broken.length && autoDetected) {
-        formed = autoDetected.formed;
-        broken = autoDetected.broken;
-      }
-
-      // Store editable state - each bond is {desc, color, type, order, atomIdx}
+      // Store editable state - each bond has {desc, color, type, order, atomIdx}
       const stepKey = `${doi}_step${idx}`;
       if (!this._stepBondData[stepKey]) {
-        const combined = [
-          ...formed.map(d => ({ desc: d, color: '#00c48c', type: 'formed' })),
-          ...broken.map(d => ({ desc: d, color: '#ff6b6b', type: 'broken' }))
-        ];
         this._stepBondData[stepKey] = {
-          bondItems: combined.map((item, i) => ({ ...item, order: i + 1, atomIdx: null }))
+          bondItems: alternatingBonds.map((item, i) => ({ ...item, order: i + 1, atomIdx: null }))
         };
       }
       const bondState = this._stepBondData[stepKey];

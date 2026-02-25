@@ -161,7 +161,8 @@ Drag to move · Edge to resize · Click two atoms to mark bond · Drag blank are
 <div class="dm">
 <div class="topbar">
 <div class="sbox"><span>🔍</span><input type="text" id="searchInput" placeholder="Search DOI, SMILES, reagents..." onkeyup="DataApp.applyFilters()"></div>
-<div class="sbox" style="flex:0.6"><span>🧪</span><input type="text" id="searchSubstruct" placeholder="Substructure SMILES" onkeyup="DataApp.applyFilters()"></div>
+<div class="sbox" style="flex:0.6"><span>🧪</span><input type="text" id="searchSubstruct" placeholder="Substructure SMILES/SMARTS" onkeyup="DataApp.applyFilters()"></div>
+<button class="draw-btn" onclick="DataApp.openKetcher()" title="Draw substructure query">✏️ Draw</button>
 </div>
 <div class="dt">
 <table>
@@ -209,6 +210,20 @@ Drag to move · Edge to resize · Click two atoms to mark bond · Drag blank are
 <div><h4 style="font-size:12px;color:var(--muted);margin-bottom:6px">Bonds Broken</h4><div class="bond-list" id="detBroken"></div></div>
 </div>
 </div>
+</div>
+</div>
+
+<!-- Ketcher Molecular Editor Modal -->
+<div class="ketcher-overlay" id="ketcherOverlay" onclick="if(event.target===this)DataApp.closeKetcher()">
+<div class="ketcher-modal">
+<div class="ketcher-header">
+<h3>Draw Substructure Query</h3>
+<div class="ketcher-actions">
+<button class="btn-p" onclick="DataApp.useKetcherSmiles()">Use for Search</button>
+<button class="ketcher-close" onclick="DataApp.closeKetcher()">✕</button>
+</div>
+</div>
+<iframe id="ketcherFrame" src="" style="width:100%;height:calc(100% - 50px);border:none;background:#fff;border-radius:0 0 12px 12px"></iframe>
 </div>
 </div>
 
