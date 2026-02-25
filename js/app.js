@@ -4,7 +4,7 @@ window.onload = async () => {
   // Load data from JSON file
   let data = [];
   try {
-    const resp = await fetch('data.json');
+    const resp = await fetch('data/data.json');
     data = await resp.json();
   } catch (e) {
     console.warn('Could not load data.json:', e);
@@ -12,7 +12,7 @@ window.onload = async () => {
 
   // Auto-load any CSV files in the project folder
   // Users can drop CSV files alongside data.json and they'll be loaded automatically
-  const csvFiles = ['reactions.csv', 'data.csv', 'import.csv', 'shr_data.csv'];
+  const csvFiles = ['data/reactions.csv', 'data/data.csv', 'data/import.csv', 'data/shr_data.csv'];
   for (const csvFile of csvFiles) {
     try {
       const resp = await fetch(csvFile);
