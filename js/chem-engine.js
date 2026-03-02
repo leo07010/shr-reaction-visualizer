@@ -213,20 +213,29 @@ const ChemEngine = {
       const RED   = [0.92, 0.15, 0.15];
 
       // Build unified bond list with per-bond colors + order info
+      // Filter by molRole: SM only shows broken, Product only shows formed
       const allBondDescs = [];
       if (bondItems && bondItems.length) {
         for (const item of bondItems) {
+          // Skip items that don't match this molecule's role
+          if (role === 'sm' && item.type === 'formed') continue;
+          if (role === 'product' && item.type === 'broken') continue;
           // Strip atom indices from desc like "C(3)-N(7)" → "C-N" for matching
           const cleanDesc = item.desc ? item.desc.replace(/\(\d+\)/g, '') : item.desc;
           allBondDescs.push({ desc: cleanDesc, color: hexToRgb(item.color), order: item.order, type: item.type, rawColor: item.color });
         }
       } else {
-        for (const d of (formedBonds || [])) allBondDescs.push({ desc: d, color: GREEN });
-        for (const d of (brokenBonds || [])) allBondDescs.push({ desc: d, color: RED });
+        // Legacy path: separate formedBonds/brokenBonds arrays
+        if (role !== 'product') {
+          for (const d of (brokenBonds || [])) allBondDescs.push({ desc: d, color: RED, type: 'broken' });
+        }
+        if (role !== 'sm') {
+          for (const d of (formedBonds || [])) allBondDescs.push({ desc: d, color: GREEN, type: 'formed' });
+        }
       }
 
-      // Track which atom belongs to which bond order (for numbered circles)
-      const atomBondOrderMap = {}; // atomIdx → {order, rawColor, type}
+      // Track which atom belongs to which bond changes (supports multiple per atom)
+      const atomBondOrderMap = {}; // atomIdx → [{order, rawColor, type}]
 
       // Compute implicit H count per atom for X-H bond matching
       // valence map: expected default valence for common elements
@@ -279,7 +288,8 @@ const ChemEngine = {
               highlightAtomColors[ai] = item.color;
             }
             if (item.order) {
-              atomBondOrderMap[ai] = { order: item.order, rawColor: item.rawColor, type: item.type };
+              if (!atomBondOrderMap[ai]) atomBondOrderMap[ai] = [];
+              atomBondOrderMap[ai].push({ order: item.order, rawColor: item.rawColor, type: item.type });
             }
             matchedDescs.add(di);
             atomImplicitH[ai]--; // consume one implicit H
@@ -310,8 +320,10 @@ const ChemEngine = {
                 }
               }
               if (item.order) {
-                atomBondOrderMap[aidx1] = { order: item.order, rawColor: item.rawColor, type: item.type };
-                atomBondOrderMap[aidx2] = { order: item.order, rawColor: item.rawColor, type: item.type };
+                if (!atomBondOrderMap[aidx1]) atomBondOrderMap[aidx1] = [];
+                atomBondOrderMap[aidx1].push({ order: item.order, rawColor: item.rawColor, type: item.type });
+                if (!atomBondOrderMap[aidx2]) atomBondOrderMap[aidx2] = [];
+                atomBondOrderMap[aidx2].push({ order: item.order, rawColor: item.rawColor, type: item.type });
               }
               matchedDescs.add(di);
               break;
@@ -332,24 +344,17 @@ const ChemEngine = {
         padding: 0.12
       };
 
-      if (highlightBonds.length > 0 || highlightAtoms.length > 0) {
-        if (highlightBonds.length > 0) {
-          details.bonds = highlightBonds;
-          details.highlightBondColors = highlightBondColors;
-          details.highlightBondWidthMultiplier = 20;
-        }
-        details.atoms = highlightAtoms;
-        details.highlightAtomColors = highlightAtomColors;
-        details.highlightAtomRadii = {};
-        for (const ai of highlightAtoms) {
-          details.highlightAtomRadii[ai] = 0.45;
-        }
+      if (highlightBonds.length > 0) {
+        details.bonds = highlightBonds;
+        details.highlightBondColors = highlightBondColors;
+        details.highlightBondWidthMultiplier = 8;
       }
+      // No atom circle highlights — we use text labels instead
 
       let svg = mol.get_svg_with_highlights(JSON.stringify(details));
 
-      // Add legend overlay
-      if (highlightBonds.length > 0 || highlightAtoms.length > 0) {
+      // Add legend overlay (only for legacy formedBonds/brokenBonds path)
+      if (!bondItems && (highlightBonds.length > 0 || highlightAtoms.length > 0)) {
         svg = this._addLegendToSvg(svg, formedBonds, brokenBonds, role);
       }
 
@@ -527,9 +532,10 @@ const ChemEngine = {
   },
 
   // ═══════════════════════════════════════════
-  //  Add numbered circles on atoms involved in each bond change
+  //  Add small text labels on atoms involved in bond changes
+  //  No circles — just compact red/green text with order numbers
   //  atomPositions: [{idx, cx, cy}] from _getAtomPositionsFromMol
-  //  atomBondOrderMap: { atomIdx: {order, rawColor, type} }
+  //  atomBondOrderMap: { atomIdx: [{order, rawColor, type}, ...] }
   // ═══════════════════════════════════════════
   _addNumberedAtomCircles(svgStr, atomPositions, atomBondOrderMap) {
     if (!svgStr || !atomPositions || !atomBondOrderMap) return svgStr;
@@ -538,34 +544,58 @@ const ChemEngine = {
     // Get viewBox for sizing
     const vbMatch = svgStr.match(/viewBox=['"]([\d.\s,eE+-]+)['"]/);
     const vb = vbMatch ? vbMatch[1].split(/[\s,]+/).map(Number) : [0, 0, 250, 200];
-    const r = vb[2] * 0.04; // circle radius relative to SVG width
+    const fontSize = vb[2] * 0.028; // small text — half of previous
 
-    let circles = '';
+    let labels = '';
     const processedAtoms = new Set();
 
-    for (const [atomIdxStr, info] of Object.entries(atomBondOrderMap)) {
+    for (const [atomIdxStr, entries] of Object.entries(atomBondOrderMap)) {
       const atomIdx = parseInt(atomIdxStr);
-      if (!info || !info.order) continue;
+      if (!entries || !entries.length) continue;
       if (processedAtoms.has(atomIdx)) continue;
       processedAtoms.add(atomIdx);
 
       const pos = atomPositions[atomIdx];
       if (!pos) continue;
 
-      const isFormed = info.type === 'formed';
-      const strokeColor = info.rawColor || (isFormed ? '#00c48c' : '#ff6b6b');
-      const fillColor = isFormed ? 'rgba(0,196,140,0.35)' : 'rgba(255,107,107,0.35)';
+      // Deduplicate entries by order number
+      const seen = new Set();
+      const unique = entries.filter(e => {
+        const key = `${e.type}_${e.order}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
 
-      // Offset to top-right of atom position
-      const ncx = pos.cx + r * 0.9;
-      const ncy = pos.cy - r * 0.9;
+      // Build label parts: "F1,B2" or just "B1"
+      const parts = unique.map(e => {
+        const prefix = e.type === 'formed' ? 'F' : 'B';
+        return { text: `${prefix}${e.order}`, type: e.type };
+      });
 
-      circles += `<circle cx="${ncx.toFixed(1)}" cy="${ncy.toFixed(1)}" r="${r.toFixed(1)}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="2.5"/>`;
-      circles += `<text x="${ncx.toFixed(1)}" y="${(ncy + r * 0.4).toFixed(1)}" text-anchor="middle" font-size="${(r * 1.5).toFixed(1)}" font-weight="900" font-family="Arial,sans-serif" fill="${strokeColor}">${info.order}</text>`;
+      // Position: offset to top-right of atom
+      const tx = pos.cx + vb[2] * 0.02;
+      const ty = pos.cy - vb[2] * 0.02;
+
+      // If mixed types, render each part with its own color
+      if (parts.length === 1) {
+        const color = parts[0].type === 'formed' ? '#00a86b' : '#d63031';
+        labels += `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="start" dominant-baseline="auto" font-size="${fontSize.toFixed(1)}" font-weight="700" font-family="Arial,sans-serif" fill="${color}">${parts[0].text}</text>`;
+      } else {
+        // Multiple entries: combine with comma, each colored
+        let xOff = 0;
+        for (let i = 0; i < parts.length; i++) {
+          const color = parts[i].type === 'formed' ? '#00a86b' : '#d63031';
+          const comma = i < parts.length - 1 ? ',' : '';
+          const labelStr = parts[i].text + comma;
+          labels += `<text x="${(tx + xOff).toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="start" dominant-baseline="auto" font-size="${fontSize.toFixed(1)}" font-weight="700" font-family="Arial,sans-serif" fill="${color}">${labelStr}</text>`;
+          xOff += labelStr.length * fontSize * 0.6;
+        }
+      }
     }
 
-    if (!circles) return svgStr;
-    return svgStr.replace('</svg>', `<g class="bond-number-overlays">${circles}</g></svg>`);
+    if (!labels) return svgStr;
+    return svgStr.replace('</svg>', `<g class="bond-label-overlays">${labels}</g></svg>`);
   },
 
   // Add a small legend overlay at the bottom of the SVG
