@@ -501,7 +501,9 @@ const VisualizerApp = {
       html: `<div class="cv-title">${isDOI ? `<a href="https://doi.org/${doi}" target="_blank">${doi}</a>` : doi}</div>`,
     });
 
-    // ── Overview Row ──
+    // ── Overview Row (half-size: steps are the main focus) ──
+    const OV_W = Math.round(MOL_W / 2);   // 130
+    const OV_H = Math.round(MOL_H / 2);   // 130
     const step1 = steps.filter(s => parseInt(s['Step']) === 1);
     const smSet = new Set();
     for (const s of (step1.length ? step1 : [steps[0]])) {
@@ -518,26 +520,26 @@ const VisualizerApp = {
 
     smList.forEach((sm, i) => {
       if (i > 0) {
-        this.addElement({ type: 'label', x: cx, y: oy + MOL_H / 2 - 16, html: '<div class="cv-plus">+</div>' });
-        cx += 40;
+        this.addElement({ type: 'label', x: cx, y: oy + OV_H / 2 - 12, html: '<div class="cv-plus">+</div>' });
+        cx += 30;
       }
-      this.addElement({ type: 'molecule', x: cx, y: oy, smiles: sm, width: MOL_W, height: MOL_H, label: i === 0 ? 'SM' : `SM${i + 1}` });
-      cx += MOL_W + 30;
+      this.addElement({ type: 'molecule', x: cx, y: oy, smiles: sm, width: OV_W, height: OV_H, label: i === 0 ? 'SM' : `SM${i + 1}` });
+      cx += OV_W + 20;
     });
 
     this.addElement({
-      type: 'label', x: cx, y: oy + MOL_H / 2 - 24,
+      type: 'label', x: cx, y: oy + OV_H / 2 - 20,
       html: `<div class="cv-big-arrow">
         <div class="cv-arrow-line"><div class="cv-arrow-head"></div></div>
         <div class="cv-arrow-label">${(allReagents || 'Conditions').substring(0, 60)}</div>
       </div>`
     });
-    cx += 240;
+    cx += 160;
 
-    this.addElement({ type: 'molecule', x: cx, y: oy - 15, smiles: prodSmiles, width: MOL_W + 40, height: MOL_H + 40, label: 'Product' });
+    this.addElement({ type: 'molecule', x: cx, y: oy - 10, smiles: prodSmiles, width: OV_W + 20, height: OV_H + 20, label: 'Product' });
 
     // ── Step-by-Step with Checkbox Selection ──
-    const startY = oy + MOL_H + 80;
+    const startY = oy + OV_H + 60;
 
     // Initialize visible steps: default to last step only
     if (!this._visibleSteps) this._visibleSteps = {};
