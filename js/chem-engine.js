@@ -289,26 +289,59 @@ const ChemEngine = {
           }
         } else {
           // ─── Normal explicit bond matching ───
-          for (let bi = 0; bi < bonds.length; bi++) {
-            const bond = bonds[bi];
-            const aidx1 = bond.atoms[0];
-            const aidx2 = bond.atoms[1];
-            const elem1 = atomElements[aidx1];
-            const elem2 = atomElements[aidx2];
-            const bondOrder = bond.bo || 1;
+          // Key insight: a FORMED bond exists in Product but NOT in SM.
+          // A BROKEN bond exists in SM but NOT in Product.
+          // When highlighting on the "wrong" molecule (formed on SM, broken on Product),
+          // we should find UNBONDED atom pairs instead of matching existing bonds.
+          const isReverse = (item.type === 'formed' && role === 'sm') ||
+                            (item.type === 'broken' && role === 'product');
 
-            if (this._bondMatches(elem1, elem2, bondOrder, parsed)) {
-              if (!highlightBonds.includes(bi)) {
-                highlightBonds.push(bi);
-                highlightBondColors[bi] = item.color;
-                if (!highlightAtoms.includes(aidx1)) {
-                  highlightAtoms.push(aidx1);
-                  highlightAtomColors[aidx1] = item.color;
+          if (isReverse) {
+            // ─── Reverse matching: find unbonded atom pairs ───
+            // Build set of bonded atom pairs for quick lookup
+            const bondedSet = new Set();
+            for (const b of bonds) {
+              const a1 = b.atoms[0], a2 = b.atoms[1];
+              bondedSet.add(`${Math.min(a1,a2)}-${Math.max(a1,a2)}`);
+            }
+
+            // Find all unbonded pairs of matching elements
+            let bestPair = null;
+            let bestScore = -1;
+            for (let ai = 0; ai < atomElements.length; ai++) {
+              for (let aj = ai + 1; aj < atomElements.length; aj++) {
+                const e1 = atomElements[ai], e2 = atomElements[aj];
+                const fwd = (e1 === parsed.elem1 && e2 === parsed.elem2);
+                const rev = (e1 === parsed.elem2 && e2 === parsed.elem1);
+                if (!fwd && !rev) continue;
+
+                // Must NOT be bonded to each other
+                const pairKey = `${Math.min(ai,aj)}-${Math.max(ai,aj)}`;
+                if (bondedSet.has(pairKey)) continue;
+
+                // Skip atoms already used for another bond descriptor with same order
+                const alreadyUsed = (atomBondOrderMap[ai] || []).some(x => x.order === item.order) ||
+                                    (atomBondOrderMap[aj] || []).some(x => x.order === item.order);
+                if (alreadyUsed) continue;
+
+                // Score: prefer atoms with more implicit H (available valence)
+                const score = (atomImplicitH[ai] || 0) + (atomImplicitH[aj] || 0);
+                if (score > bestScore) {
+                  bestScore = score;
+                  bestPair = [ai, aj];
                 }
-                if (!highlightAtoms.includes(aidx2)) {
-                  highlightAtoms.push(aidx2);
-                  highlightAtomColors[aidx2] = item.color;
-                }
+              }
+            }
+
+            if (bestPair) {
+              const [aidx1, aidx2] = bestPair;
+              if (!highlightAtoms.includes(aidx1)) {
+                highlightAtoms.push(aidx1);
+                highlightAtomColors[aidx1] = item.color;
+              }
+              if (!highlightAtoms.includes(aidx2)) {
+                highlightAtoms.push(aidx2);
+                highlightAtomColors[aidx2] = item.color;
               }
               if (item.order) {
                 if (!atomBondOrderMap[aidx1]) atomBondOrderMap[aidx1] = [];
@@ -317,7 +350,39 @@ const ChemEngine = {
                 atomBondOrderMap[aidx2].push({ order: item.order, rawColor: item.rawColor, type: item.type });
               }
               matchedDescs.add(di);
-              break;
+            }
+          } else {
+            // ─── Forward matching: bond EXISTS on this molecule ───
+            for (let bi = 0; bi < bonds.length; bi++) {
+              const bond = bonds[bi];
+              const aidx1 = bond.atoms[0];
+              const aidx2 = bond.atoms[1];
+              const elem1 = atomElements[aidx1];
+              const elem2 = atomElements[aidx2];
+              const bondOrder = bond.bo || 1;
+
+              if (this._bondMatches(elem1, elem2, bondOrder, parsed)) {
+                if (!highlightBonds.includes(bi)) {
+                  highlightBonds.push(bi);
+                  highlightBondColors[bi] = item.color;
+                  if (!highlightAtoms.includes(aidx1)) {
+                    highlightAtoms.push(aidx1);
+                    highlightAtomColors[aidx1] = item.color;
+                  }
+                  if (!highlightAtoms.includes(aidx2)) {
+                    highlightAtoms.push(aidx2);
+                    highlightAtomColors[aidx2] = item.color;
+                  }
+                }
+                if (item.order) {
+                  if (!atomBondOrderMap[aidx1]) atomBondOrderMap[aidx1] = [];
+                  atomBondOrderMap[aidx1].push({ order: item.order, rawColor: item.rawColor, type: item.type });
+                  if (!atomBondOrderMap[aidx2]) atomBondOrderMap[aidx2] = [];
+                  atomBondOrderMap[aidx2].push({ order: item.order, rawColor: item.rawColor, type: item.type });
+                }
+                matchedDescs.add(di);
+                break;
+              }
             }
           }
         }
