@@ -212,26 +212,17 @@ const ChemEngine = {
       const GREEN = [0.0, 0.78, 0.45];
       const RED   = [0.92, 0.15, 0.15];
 
-      // Build unified bond list with per-bond colors + order info
-      // Filter by molRole: SM only shows broken, Product only shows formed
+      // Build unified bond list — show ALL bond changes on BOTH SM and Product
+      // so users can trace atoms: left molecule → right molecule by order numbers
       const allBondDescs = [];
       if (bondItems && bondItems.length) {
         for (const item of bondItems) {
-          // Skip items that don't match this molecule's role
-          if (role === 'sm' && item.type === 'formed') continue;
-          if (role === 'product' && item.type === 'broken') continue;
-          // Strip atom indices from desc like "C(3)-N(7)" → "C-N" for matching
           const cleanDesc = item.desc ? item.desc.replace(/\(\d+\)/g, '') : item.desc;
           allBondDescs.push({ desc: cleanDesc, color: hexToRgb(item.color), order: item.order, type: item.type, rawColor: item.color });
         }
       } else {
-        // Legacy path: separate formedBonds/brokenBonds arrays
-        if (role !== 'product') {
-          for (const d of (brokenBonds || [])) allBondDescs.push({ desc: d, color: RED, type: 'broken' });
-        }
-        if (role !== 'sm') {
-          for (const d of (formedBonds || [])) allBondDescs.push({ desc: d, color: GREEN, type: 'formed' });
-        }
+        for (const d of (formedBonds || [])) allBondDescs.push({ desc: d, color: GREEN, type: 'formed' });
+        for (const d of (brokenBonds || [])) allBondDescs.push({ desc: d, color: RED, type: 'broken' });
       }
 
       // Track which atom belongs to which bond changes (supports multiple per atom)
@@ -537,20 +528,24 @@ const ChemEngine = {
   //  atomPositions: [{idx, cx, cy}] from _getAtomPositionsFromMol
   //  atomBondOrderMap: { atomIdx: [{order, rawColor, type}, ...] }
   // ═══════════════════════════════════════════
+  //  Colored circle overlays + order labels on bond-change atoms
+  //  Green = formed only, Red = broken only, Purple = both
+  //  Each atom shows its order numbers so users can trace SM ↔ Product
+  // ═══════════════════════════════════════════
   _addNumberedAtomCircles(svgStr, atomPositions, atomBondOrderMap) {
     if (!svgStr || !atomPositions || !atomBondOrderMap) return svgStr;
     if (Object.keys(atomBondOrderMap).length === 0) return svgStr;
 
-    // Get viewBox for sizing
     const vbMatch = svgStr.match(/viewBox=['"]([\d.\s,eE+-]+)['"]/);
     const vb = vbMatch ? vbMatch[1].split(/[\s,]+/).map(Number) : [0, 0, 250, 200];
-    const r = vb[2] * 0.032; // circle radius
+    const r = vb[2] * 0.038;          // circle radius
+    const fontSize = vb[2] * 0.028;   // label font size
+    const labelR = vb[2] * 0.018;     // small badge radius
 
-    // Color definitions
     const COLORS = {
-      formed: { stroke: '#00a86b', fill: 'rgba(0,168,107,0.22)' },
-      broken: { stroke: '#d63031', fill: 'rgba(214,48,49,0.22)' },
-      both:   { stroke: '#8b5cf6', fill: 'rgba(139,92,246,0.22)' }
+      formed: { stroke: '#00a86b', fill: 'rgba(0,168,107,0.18)', text: '#00a86b' },
+      broken: { stroke: '#d63031', fill: 'rgba(214,48,49,0.18)', text: '#d63031' },
+      both:   { stroke: '#7c3aed', fill: 'rgba(124,58,237,0.18)', text: '#7c3aed' }
     };
 
     let overlays = '';
@@ -565,19 +560,56 @@ const ChemEngine = {
       const pos = atomPositions[atomIdx];
       if (!pos) continue;
 
-      // Determine atom role: formed only, broken only, or both
-      const types = new Set(entries.map(e => e.type));
+      // Deduplicate by order
+      const seen = new Set();
+      const unique = entries.filter(e => {
+        const k = `${e.type}_${e.order}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+
+      // Determine color: formed only / broken only / both
+      const types = new Set(unique.map(e => e.type));
       const hasFormed = types.has('formed');
       const hasBroken = types.has('broken');
-      let role;
-      if (hasFormed && hasBroken) role = 'both';
-      else if (hasFormed) role = 'formed';
-      else role = 'broken';
+      let atomRole;
+      if (hasFormed && hasBroken) atomRole = 'both';
+      else if (hasFormed) atomRole = 'formed';
+      else atomRole = 'broken';
 
-      const c = COLORS[role];
+      const c = COLORS[atomRole];
 
-      // Circle around the atom
-      overlays += `<circle cx="${pos.cx.toFixed(1)}" cy="${pos.cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${c.fill}" stroke="${c.stroke}" stroke-width="1.8"/>`;
+      // ── Circle highlight around atom ──
+      overlays += `<circle cx="${pos.cx.toFixed(1)}" cy="${pos.cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${c.fill}" stroke="${c.stroke}" stroke-width="2"/>`;
+
+      // ── Order number badges (top-right of atom) ──
+      // Build combined label: "F1,B2" or "B1" etc.
+      const labelParts = unique.map(e => {
+        const prefix = e.type === 'formed' ? 'F' : 'B';
+        return { text: `${prefix}${e.order}`, type: e.type };
+      });
+
+      // Position: offset to top-right
+      const badgeX = pos.cx + r * 0.7;
+      const badgeY = pos.cy - r * 0.7;
+
+      // Background pill for readability
+      const fullLabel = labelParts.map(p => p.text).join(',');
+      const pillW = fullLabel.length * fontSize * 0.55 + 4;
+      const pillH = fontSize + 2;
+      overlays += `<rect x="${(badgeX - 2).toFixed(1)}" y="${(badgeY - pillH + 2).toFixed(1)}" width="${pillW.toFixed(1)}" height="${pillH.toFixed(1)}" rx="3" fill="white" fill-opacity="0.85"/>`;
+
+      // Render each part with its own color
+      let xOff = 0;
+      for (let i = 0; i < labelParts.length; i++) {
+        const p = labelParts[i];
+        const pColor = COLORS[p.type === 'formed' ? 'formed' : 'broken'].text;
+        const comma = i < labelParts.length - 1 ? ',' : '';
+        const str = p.text + comma;
+        overlays += `<text x="${(badgeX + xOff).toFixed(1)}" y="${(badgeY).toFixed(1)}" font-size="${fontSize.toFixed(1)}" font-weight="700" font-family="Arial,sans-serif" fill="${pColor}">${str}</text>`;
+        xOff += str.length * fontSize * 0.55;
+      }
     }
 
     if (!overlays) return svgStr;
