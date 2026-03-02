@@ -532,8 +532,8 @@ const ChemEngine = {
   },
 
   // ═══════════════════════════════════════════
-  //  Add small text labels on atoms involved in bond changes
-  //  No circles — just compact red/green text with order numbers
+  //  Add colored circle overlays on atoms involved in bond changes
+  //  Green circle = formed only, Red circle = broken only, Purple = both
   //  atomPositions: [{idx, cx, cy}] from _getAtomPositionsFromMol
   //  atomBondOrderMap: { atomIdx: [{order, rawColor, type}, ...] }
   // ═══════════════════════════════════════════
@@ -544,9 +544,16 @@ const ChemEngine = {
     // Get viewBox for sizing
     const vbMatch = svgStr.match(/viewBox=['"]([\d.\s,eE+-]+)['"]/);
     const vb = vbMatch ? vbMatch[1].split(/[\s,]+/).map(Number) : [0, 0, 250, 200];
-    const fontSize = vb[2] * 0.028; // small text — half of previous
+    const r = vb[2] * 0.032; // circle radius
 
-    let labels = '';
+    // Color definitions
+    const COLORS = {
+      formed: { stroke: '#00a86b', fill: 'rgba(0,168,107,0.22)' },
+      broken: { stroke: '#d63031', fill: 'rgba(214,48,49,0.22)' },
+      both:   { stroke: '#8b5cf6', fill: 'rgba(139,92,246,0.22)' }
+    };
+
+    let overlays = '';
     const processedAtoms = new Set();
 
     for (const [atomIdxStr, entries] of Object.entries(atomBondOrderMap)) {
@@ -558,44 +565,23 @@ const ChemEngine = {
       const pos = atomPositions[atomIdx];
       if (!pos) continue;
 
-      // Deduplicate entries by order number
-      const seen = new Set();
-      const unique = entries.filter(e => {
-        const key = `${e.type}_${e.order}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+      // Determine atom role: formed only, broken only, or both
+      const types = new Set(entries.map(e => e.type));
+      const hasFormed = types.has('formed');
+      const hasBroken = types.has('broken');
+      let role;
+      if (hasFormed && hasBroken) role = 'both';
+      else if (hasFormed) role = 'formed';
+      else role = 'broken';
 
-      // Build label parts: "F1,B2" or just "B1"
-      const parts = unique.map(e => {
-        const prefix = e.type === 'formed' ? 'F' : 'B';
-        return { text: `${prefix}${e.order}`, type: e.type };
-      });
+      const c = COLORS[role];
 
-      // Position: offset to top-right of atom
-      const tx = pos.cx + vb[2] * 0.02;
-      const ty = pos.cy - vb[2] * 0.02;
-
-      // If mixed types, render each part with its own color
-      if (parts.length === 1) {
-        const color = parts[0].type === 'formed' ? '#00a86b' : '#d63031';
-        labels += `<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="start" dominant-baseline="auto" font-size="${fontSize.toFixed(1)}" font-weight="700" font-family="Arial,sans-serif" fill="${color}">${parts[0].text}</text>`;
-      } else {
-        // Multiple entries: combine with comma, each colored
-        let xOff = 0;
-        for (let i = 0; i < parts.length; i++) {
-          const color = parts[i].type === 'formed' ? '#00a86b' : '#d63031';
-          const comma = i < parts.length - 1 ? ',' : '';
-          const labelStr = parts[i].text + comma;
-          labels += `<text x="${(tx + xOff).toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="start" dominant-baseline="auto" font-size="${fontSize.toFixed(1)}" font-weight="700" font-family="Arial,sans-serif" fill="${color}">${labelStr}</text>`;
-          xOff += labelStr.length * fontSize * 0.6;
-        }
-      }
+      // Circle around the atom
+      overlays += `<circle cx="${pos.cx.toFixed(1)}" cy="${pos.cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${c.fill}" stroke="${c.stroke}" stroke-width="1.8"/>`;
     }
 
-    if (!labels) return svgStr;
-    return svgStr.replace('</svg>', `<g class="bond-label-overlays">${labels}</g></svg>`);
+    if (!overlays) return svgStr;
+    return svgStr.replace('</svg>', `<g class="bond-atom-overlays">${overlays}</g></svg>`);
   },
 
   // Add a small legend overlay at the bottom of the SVG
