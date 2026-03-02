@@ -180,13 +180,17 @@ const StructureSearch = {
           for (const m of data.results) {
             const svg = m.svg || ChemEngine.getSvg(m.smiles, 80, 80) || '';
             const doi = m.doi || 'Unknown';
+            const step = m.step || '?';
+            const role = m.role === 'SM' ? 'Starting Material' : 'Product';
             const truncSmiles = m.smiles.length > 60 ? m.smiles.substring(0, 57) + '...' : m.smiles;
-            html += `<div class="search-result-card" onclick="goPage('data');document.getElementById('searchInput').value='${doi.replace(/'/g, "\\'")}';DataApp.applyFilters()">
+            const safeSmiles = m.smiles.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            const safeDoi = doi.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            html += `<div class="search-result-card" onclick="StructureSearch.showResultDetail('${safeSmiles}','${safeDoi}','${step}','${role}','Python RDKit')">
               <div class="search-result-mol">${svg}</div>
               <div class="search-result-info">
                 <div class="search-result-doi">${doi}</div>
                 <div class="search-result-smiles" title="${m.smiles}">${truncSmiles}</div>
-                <div class="search-result-step">Step ${m.step} · ${m.role === 'SM' ? 'Starting Material' : 'Product'}</div>
+                <div class="search-result-step">Step ${step} · ${role}</div>
                 <span class="search-result-highlight">🐍 Python RDKit match</span>
               </div>
             </div>`;
@@ -241,7 +245,9 @@ const StructureSearch = {
       const step = m.entry['Step'] || '?';
       const role = m.field === 'SMILES SM' ? 'Starting Material' : 'Product';
       const truncSmiles = m.smiles.length > 60 ? m.smiles.substring(0, 57) + '...' : m.smiles;
-      html += `<div class="search-result-card" onclick="goPage('data');document.getElementById('searchInput').value='${doi.replace(/'/g, "\\'")}';DataApp.applyFilters()">
+      const safeSmiles = m.smiles.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      const safeDoi = doi.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+      html += `<div class="search-result-card" onclick="StructureSearch.showResultDetail('${safeSmiles}','${safeDoi}','${step}','${role}','JS RDKit')">
         <div class="search-result-mol">${svg}</div>
         <div class="search-result-info">
           <div class="search-result-doi">${doi}</div>
@@ -262,5 +268,59 @@ const StructureSearch = {
     if (resultsDiv) resultsDiv.innerHTML = '<div class="search-placeholder">Draw a molecular fragment and click "Search" to find matching molecules.</div>';
     if (countSpan) countSpan.textContent = '';
     if (input) input.value = '';
+  },
+
+  // ── Result detail modal ──
+  _modalData: null,
+
+  showResultDetail(smiles, doi, step, role, matchType) {
+    this._modalData = { smiles, doi, step, role };
+    // Generate larger SVG for the modal
+    const svg = ChemEngine.getSvg(smiles, 300, 220) || `<div style="color:#999;font-size:14px">Structure unavailable</div>`;
+    document.getElementById('srMolDisplay').innerHTML = svg;
+    document.getElementById('srSmiles').textContent = smiles;
+    document.getElementById('srDoi').textContent = doi;
+    document.getElementById('srStep').textContent = step;
+    document.getElementById('srRole').textContent = role;
+    document.getElementById('srMatch').innerHTML = matchType.includes('Python')
+      ? '<span style="color:#00c48c">🐍 ' + matchType + '</span>'
+      : '<span style="color:var(--accent)">⚡ ' + matchType + '</span>';
+    document.getElementById('srOverlay').classList.add('on');
+  },
+
+  copySmiles() {
+    if (!this._modalData) return;
+    navigator.clipboard.writeText(this._modalData.smiles).then(() => {
+      toast('SMILES copied to clipboard', 'success');
+    }).catch(() => {
+      // Fallback for older browsers
+      const ta = document.createElement('textarea');
+      ta.value = this._modalData.smiles;
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+      toast('SMILES copied to clipboard', 'success');
+    });
+  },
+
+  goFromModal(page) {
+    document.getElementById('srOverlay').classList.remove('on');
+    if (!this._modalData) return;
+    const doi = this._modalData.doi;
+    if (page === 'data') {
+      goPage('data');
+      document.getElementById('searchInput').value = doi;
+      DataApp.applyFilters();
+    } else if (page === 'visualizer') {
+      goPage('visualizer');
+      // Auto-select matching DOI in the visualizer sidebar
+      setTimeout(() => {
+        const vizSearch = document.getElementById('vizSearch');
+        if (vizSearch) { vizSearch.value = doi; VisualizerApp.filterDOIs(); }
+        // Click the first matching DOI entry
+        const doiItems = document.querySelectorAll('.viz-doi-item');
+        for (const item of doiItems) {
+          if (item.textContent.includes(doi)) { item.click(); break; }
+        }
+      }, 200);
+    }
   }
 };

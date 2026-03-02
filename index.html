@@ -271,6 +271,30 @@ Drag to move · Edge to resize · Click two atoms to mark bond · Drag blank are
 </div>
 </div>
 
+<!-- Search Result Detail Modal -->
+<div class="sr-overlay" id="srOverlay" onclick="if(event.target===this)this.classList.remove('on')">
+<div class="sr-modal">
+<button class="sr-close" onclick="document.getElementById('srOverlay').classList.remove('on')">✕</button>
+<div class="sr-mol-display" id="srMolDisplay"></div>
+<div class="sr-details">
+<div class="sr-smiles-row">
+<code class="sr-smiles" id="srSmiles"></code>
+<button class="sr-copy-btn" onclick="StructureSearch.copySmiles()" title="Copy SMILES">📋 Copy</button>
+</div>
+<div class="sr-meta">
+<div class="sr-meta-item"><span class="sr-meta-label">Reference</span><span class="sr-meta-value" id="srDoi"></span></div>
+<div class="sr-meta-item"><span class="sr-meta-label">Step</span><span class="sr-meta-value" id="srStep"></span></div>
+<div class="sr-meta-item"><span class="sr-meta-label">Role</span><span class="sr-meta-value" id="srRole"></span></div>
+<div class="sr-meta-item"><span class="sr-meta-label">Match</span><span class="sr-meta-value" id="srMatch"></span></div>
+</div>
+<div class="sr-actions">
+<button class="sr-action-btn sr-btn-db" onclick="StructureSearch.goFromModal('data')">📊 Go to Database</button>
+<button class="sr-action-btn sr-btn-viz" onclick="StructureSearch.goFromModal('visualizer')">🔬 Go to Visualizer</button>
+</div>
+</div>
+</div>
+</div>
+
 <!-- Detail Overlay -->
 <div class="detail-overlay" id="detailOverlay" onclick="if(event.target===this)this.classList.remove('on')">
 <div class="detail-modal">
