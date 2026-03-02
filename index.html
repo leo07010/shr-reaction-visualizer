@@ -201,24 +201,28 @@ Drag to move · Edge to resize · Click two atoms to mark bond · Drag blank are
 <div class="draw-editor-area" style="flex:1;display:flex;gap:8px;min-height:0">
 <!-- Drawing Toolbar -->
 <div class="draw-tb" id="drawToolbar">
-<button class="dtb-btn" data-t="select" title="Select / Move (V)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg></button>
+<button class="dtb-btn" data-t="select" title="Select / Move (V)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/></svg><span class="dtb-label">Move</span></button>
 <div class="dtb-sep"></div>
-<button class="dtb-btn on" data-t="bond" title="Single Bond (1)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/></svg></button>
-<button class="dtb-btn" data-t="double" title="Double Bond (2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="18" x2="19" y2="4"/><line x1="7" y1="20" x2="21" y2="6"/></svg></button>
-<button class="dtb-btn" data-t="triple" title="Triple Bond (3)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="17" x2="18" y2="3"/><line x1="6" y1="19" x2="20" y2="5"/><line x1="8" y1="21" x2="22" y2="7"/></svg></button>
+<button class="dtb-btn on" data-t="bond" title="Single Bond (1)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/></svg><span class="dtb-label">1</span></button>
+<button class="dtb-btn" data-t="double" title="Double Bond (2)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="18" x2="19" y2="4"/><line x1="7" y1="20" x2="21" y2="6"/></svg><span class="dtb-label">2</span></button>
+<button class="dtb-btn" data-t="triple" title="Triple Bond (3)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="17" x2="18" y2="3"/><line x1="6" y1="19" x2="20" y2="5"/><line x1="8" y1="21" x2="22" y2="7"/></svg><span class="dtb-label">3</span></button>
 <div class="dtb-sep"></div>
-<button class="dtb-btn" data-t="ring6" title="Hexagon (6)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,3 21,8 21,16 12,21 3,16 3,8"/></svg></button>
-<button class="dtb-btn" data-t="ring5" title="Pentagon (5)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,3 22,10 19,21 5,21 2,10"/></svg></button>
-<button class="dtb-btn" data-t="benzene" title="Benzene (B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,3 21,8 21,16 12,21 3,16 3,8"/><circle cx="12" cy="12" r="4"/></svg></button>
+<button class="dtb-btn" data-t="ring6" title="Hexagon (6)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,3 21,8 21,16 12,21 3,16 3,8"/></svg><span class="dtb-label">6</span></button>
+<button class="dtb-btn" data-t="ring5" title="Pentagon (5)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,3 22,10 19,21 5,21 2,10"/></svg><span class="dtb-label">5</span></button>
+<button class="dtb-btn" data-t="benzene" title="Benzene (B)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,3 21,8 21,16 12,21 3,16 3,8"/><circle cx="12" cy="12" r="4"/></svg><span class="dtb-label">B</span></button>
 <div class="dtb-sep"></div>
-<button class="dtb-btn" data-t="atom" title="Atom Label (A)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg></button>
-<button class="dtb-btn" data-t="eraser" title="Eraser (E)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16l10-10 8 8-4 4"/><line x1="7" y1="20" x2="20" y2="20"/></svg></button>
+<button class="dtb-btn" data-t="atom" title="Atom Label (A)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg><span class="dtb-label">A</span></button>
+<button class="dtb-btn" data-t="eraser" title="Eraser (E)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16l10-10 8 8-4 4"/><line x1="7" y1="20" x2="20" y2="20"/></svg><span class="dtb-label">E</span></button>
 <div class="dtb-sep"></div>
 <button class="dtb-btn" data-t="undo" title="Undo (Ctrl+Z)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
 <button class="dtb-btn" data-t="clear" title="Clear All"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
 </div>
 <!-- Canvas -->
 <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+<div class="draw-canvas-header">
+<span class="draw-tool-indicator" id="drawToolIndicator">Single Bond</span>
+<span class="draw-hints">Double-click atom to change element · Right-click to delete · Click bond to cycle type</span>
+</div>
 <div class="draw-canvas-wrap" id="drawCanvasArea">
 <canvas id="drawCanvas"></canvas>
 </div>

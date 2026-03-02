@@ -7,10 +7,17 @@ const DrawEngine = {
   canvas: null, ctx: null, canvasReady: false,
   curTool: 'bond', curElem: 'C', curBondType: 'single',
   atoms: [], bonds: [], undoStack: [], nextId: 1,
-  isDragging: false, isDrawingBond: false, drawStart: null, dragTarget: null, hoverAtom: null,
+  isDragging: false, isDrawingBond: false, drawStart: null, dragTarget: null,
+  hoverAtom: null, hoverBond: null,
   mousePos: {x:0,y:0},
   SNAP_R: 22, BOND_LEN: 50, ANGLE_SNAP: Math.PI/6,
   ECOLORS: {C:'#333',H:'#888',N:'#3465a4',O:'#cc0000',S:'#c4a000',P:'#ff8000',F:'#00cc00',Cl:'#00aa00',Br:'#a52a2a',I:'#940094'},
+
+  // ── Tool display names for status indicator ──
+  TOOL_NAMES: {
+    select:'Select / Move', bond:'Single Bond', double:'Double Bond', triple:'Triple Bond',
+    ring6:'Hexagon', ring5:'Pentagon', benzene:'Benzene', atom:'Place Atom', eraser:'Eraser', fragment:'Functional Group'
+  },
 
   init(canvasId, areaId) {
     this.canvas = document.getElementById(canvasId);
@@ -20,6 +27,7 @@ const DrawEngine = {
     this._bindEvents();
     this._initResize();
     this.resize();
+    this._updateToolIndicator();
   },
 
   resize() {
@@ -49,6 +57,23 @@ const DrawEngine = {
     for (const a of this.atoms) { const d = Math.hypot(a.x-x, a.y-y); if(d<bd){best=a;bd=d;} }
     return best;
   },
+  // Find the bond nearest to (x,y) — for click-to-cycle
+  findNearBond(x, y) {
+    let best = null, bd = 12;
+    for (const b of this.bonds) {
+      const a1 = this.getAtom(b.a), a2 = this.getAtom(b.b);
+      if (!a1 || !a2) continue;
+      // Point-to-segment distance
+      const dx = a2.x-a1.x, dy = a2.y-a1.y, len2 = dx*dx+dy*dy;
+      if (len2 === 0) continue;
+      let t = ((x-a1.x)*dx + (y-a1.y)*dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      const px = a1.x + t*dx, py = a1.y + t*dy;
+      const d = Math.hypot(x-px, y-py);
+      if (d < bd) { best = b; bd = d; }
+    }
+    return best;
+  },
   mpos(e) { const r = this.canvas.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; },
   pushUndo() { this.undoStack.push(JSON.stringify({atoms:this.atoms,bonds:this.bonds,nextId:this.nextId})); if(this.undoStack.length>80)this.undoStack.shift(); },
   popUndo() { if(!this.undoStack.length)return; const s=JSON.parse(this.undoStack.pop()); this.atoms=s.atoms; this.bonds=s.bonds; this.nextId=s.nextId; this.render(); this.updateSmiles(); },
@@ -60,6 +85,7 @@ const DrawEngine = {
     this.bonds.push({a:a1.id,b:a2.id,type:type||this.curBondType});
   },
   removeAtom(a) { this.bonds=this.bonds.filter(b=>b.a!==a.id&&b.b!==a.id); this.atoms=this.atoms.filter(x=>x.id!==a.id); },
+  removeBond(b) { this.bonds = this.bonds.filter(x => x !== b); },
   atomDeg(a) { return this.bonds.filter(b=>b.a===a.id||b.b===a.id).length; },
 
   snapAngle(from, tx, ty) {
@@ -99,12 +125,17 @@ const DrawEngine = {
     }
   },
 
+  // ── Tool management ──
   setTool(t) {
     this.curTool = t;
+    this.curFragment = null;
     if(t==='bond')this.curBondType='single'; else if(t==='double')this.curBondType='double'; else if(t==='triple')this.curBondType='triple';
     this.canvas.style.cursor = t==='select'?'default':t==='eraser'?'pointer':'crosshair';
     // Update toolbar buttons
     document.querySelectorAll('#drawToolbar .dtb-btn').forEach(b => b.classList.toggle('on', b.dataset.t === t));
+    // Deselect fragment buttons
+    document.querySelectorAll('#drawFragGrid .fg-btn').forEach(b => b.classList.remove('on'));
+    this._updateToolIndicator();
   },
 
   setElem(el) {
@@ -112,9 +143,24 @@ const DrawEngine = {
     // Auto-switch to atom tool so clicking canvas immediately places this element
     this.setTool('atom');
     document.querySelectorAll('#drawElemGrid .el-btn').forEach(b => b.classList.toggle('on', b.dataset.e === el));
+    this._updateToolIndicator();
   },
 
-  // ── Place functional group fragment at click position ──
+  _updateToolIndicator() {
+    const el = document.getElementById('drawToolIndicator');
+    if (!el) return;
+    let text = this.TOOL_NAMES[this.curTool] || this.curTool;
+    if (this.curTool === 'atom') text += ` (${this.curElem})`;
+    if (this.curTool === 'fragment' && this.curFragment) text = `Place ${this.curFragment}`;
+    el.textContent = text;
+    // Color the indicator based on tool type
+    const colors = {select:'var(--muted)',bond:'var(--accent)',double:'var(--accent)',triple:'var(--accent)',
+      ring6:'#7c6fff',ring5:'#7c6fff',benzene:'#7c6fff',atom:this.ECOLORS[this.curElem]||'var(--accent)',
+      eraser:'var(--danger)',fragment:'var(--ok)'};
+    el.style.color = colors[this.curTool] || 'var(--accent)';
+  },
+
+  // ── Functional group fragments ──
   FRAGMENTS: {
     'OH':   { atoms:[{e:'O',x:0,y:0},{e:'H',x:30,y:-20}], bonds:[[0,1,'single']] },
     'NH2':  { atoms:[{e:'N',x:0,y:0},{e:'H',x:-25,y:-25},{e:'H',x:25,y:-25}], bonds:[[0,1,'single'],[0,2,'single']] },
@@ -160,17 +206,26 @@ const DrawEngine = {
     this.curFragment = name;
     this.curTool = 'fragment';
     this.canvas.style.cursor = 'crosshair';
-    // Update toolbar — deselect all tool buttons
     document.querySelectorAll('#drawToolbar .dtb-btn').forEach(b => b.classList.remove('on'));
-    // Highlight the clicked fragment button
     document.querySelectorAll('#drawFragGrid .fg-btn').forEach(b => b.classList.toggle('on', b.dataset.fg === name));
     document.querySelectorAll('#drawElemGrid .el-btn').forEach(b => b.classList.remove('on'));
+    this._updateToolIndicator();
   },
 
   clearAll() {
     this.pushUndo();
     this.atoms = []; this.bonds = []; this.nextId = 1;
     this.render(); this.updateSmiles();
+  },
+
+  // ── Bond type cycling (click existing bond) ──
+  cycleBondType(bond) {
+    this.pushUndo();
+    const order = ['single','double','triple'];
+    const idx = order.indexOf(bond.type);
+    bond.type = order[(idx + 1) % 3];
+    this.render();
+    this.updateSmiles();
   },
 
   // ── Render ──
@@ -180,15 +235,24 @@ const DrawEngine = {
     const w = parseFloat(this.canvas.style.width), h = parseFloat(this.canvas.style.height);
     ctx.clearRect(0,0,w,h);
 
-    // Grid
-    ctx.strokeStyle='#f0f0f0'; ctx.lineWidth=0.5; ctx.setLineDash([]);
-    for(let x=0;x<w;x+=25){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,h);ctx.stroke();}
-    for(let y=0;y<h;y+=25){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+    // Grid (subtle dots instead of lines for cleaner look)
+    ctx.fillStyle='#e8e8e8';
+    for(let x=25;x<w;x+=25) for(let y=25;y<h;y+=25) { ctx.beginPath(); ctx.arc(x,y,0.8,0,Math.PI*2); ctx.fill(); }
+
+    // Empty canvas guidance
+    if (this.atoms.length === 0 && !this.isDrawingBond) {
+      ctx.save();
+      ctx.fillStyle='#bbb';ctx.font='15px "Segoe UI",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText('Click to start drawing',w/2,h/2-12);
+      ctx.fillStyle='#ccc';ctx.font='12px "Segoe UI",sans-serif';
+      ctx.fillText('Use tools on the left · Select atoms/groups below',w/2,h/2+12);
+      ctx.restore();
+    }
 
     // Bonds
     for(const bd of this.bonds){
       const a1=this.getAtom(bd.a), a2=this.getAtom(bd.b);
-      if(a1&&a2) this._drawBond(a1,a2,bd.type);
+      if(a1&&a2) this._drawBond(a1,a2,bd.type, this.hoverBond===bd);
     }
 
     // Preview bond while drawing
@@ -198,7 +262,15 @@ const DrawEngine = {
       const ex=t?t.x:snap.x, ey=t?t.y:snap.y;
       ctx.strokeStyle='#00B4D8';ctx.lineWidth=2;ctx.setLineDash([6,4]);
       ctx.beginPath();ctx.moveTo(this.drawStart.x,this.drawStart.y);ctx.lineTo(ex,ey);ctx.stroke();ctx.setLineDash([]);
-      if(!t){ctx.beginPath();ctx.arc(ex,ey,6,0,Math.PI*2);ctx.strokeStyle='#00B4D8';ctx.lineWidth=1.5;ctx.stroke();}
+      // Show preview atom label at end point
+      if(!t){
+        ctx.beginPath();ctx.arc(ex,ey,11,0,Math.PI*2);
+        ctx.fillStyle='rgba(0,180,216,.1)';ctx.fill();
+        ctx.strokeStyle='#00B4D8';ctx.lineWidth=1.5;ctx.stroke();
+        // Show element label that will be placed
+        ctx.fillStyle='#00B4D8';ctx.font='bold 12px "Segoe UI",sans-serif';
+        ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(this.curElem,ex,ey+1);
+      }
     }
 
     // Atoms
@@ -211,6 +283,7 @@ const DrawEngine = {
       } else {
         ctx.fillStyle='#333';ctx.beginPath();ctx.arc(a.x,a.y,2.5,0,Math.PI*2);ctx.fill();
       }
+      // Hover highlight
       if(this.hoverAtom && this.hoverAtom.id===a.id){
         ctx.strokeStyle='#00B4D8';ctx.lineWidth=2;ctx.setLineDash([]);
         ctx.beginPath();ctx.arc(a.x,a.y,16,0,Math.PI*2);ctx.stroke();
@@ -218,11 +291,12 @@ const DrawEngine = {
     }
   },
 
-  _drawBond(a1,a2,type){
+  _drawBond(a1,a2,type,highlight){
     const ctx=this.ctx;
     const dx=a2.x-a1.x,dy=a2.y-a1.y,len=Math.hypot(dx,dy)||1;
     const nx=-dy/len,ny=dx/len,g=3;
-    ctx.strokeStyle='#333';ctx.lineWidth=2;ctx.lineCap='round';ctx.setLineDash([]);
+    ctx.strokeStyle=highlight?'#00B4D8':'#333';
+    ctx.lineWidth=highlight?2.5:2;ctx.lineCap='round';ctx.setLineDash([]);
     if(type==='single'){ctx.beginPath();ctx.moveTo(a1.x,a1.y);ctx.lineTo(a2.x,a2.y);ctx.stroke();}
     else if(type==='double'){
       ctx.beginPath();ctx.moveTo(a1.x+nx*g,a1.y+ny*g);ctx.lineTo(a2.x+nx*g,a2.y+ny*g);ctx.stroke();
@@ -282,18 +356,35 @@ const DrawEngine = {
   // ── Mouse/Keyboard Events ──
   _bindEvents() {
     const c = this.canvas;
+    let lastClickTime = 0;
 
     c.addEventListener('mousedown', e => {
       if(!this.canvasReady) return;
       e.preventDefault();
       const pos = this.mpos(e);
       const atom = this.findNear(pos.x, pos.y);
+      const now = Date.now();
+
+      // ── Double-click atom → open element picker popup ──
+      if (atom && now - lastClickTime < 350 && this.curTool !== 'eraser') {
+        lastClickTime = 0;
+        this._showAtomPopup(atom, pos);
+        return;
+      }
+      lastClickTime = now;
 
       if(this.curTool==='select'){
         if(atom){this.pushUndo();this.isDragging=true;this.dragTarget=atom;} return;
       }
       if(this.curTool==='eraser'){
-        if(atom){this.pushUndo();this.removeAtom(atom);this.hoverAtom=null;this.render();this.updateSmiles();} return;
+        if(atom){
+          this.pushUndo();this.removeAtom(atom);this.hoverAtom=null;this.render();this.updateSmiles();
+        } else {
+          // Eraser on bond: remove bond
+          const bond = this.findNearBond(pos.x, pos.y);
+          if(bond){this.pushUndo();this.removeBond(bond);this.hoverBond=null;this.render();this.updateSmiles();}
+        }
+        return;
       }
       if(this.curTool==='atom'){
         this.pushUndo(); if(atom){atom.elem=this.curElem;atom.explicit=true;} else this.addAtom(pos.x,pos.y,this.curElem,true); this.render(); this.updateSmiles(); return;
@@ -305,13 +396,27 @@ const DrawEngine = {
         this.pushUndo();this.placeRing(pos.x,pos.y,this.curTool);this.render();this.updateSmiles();return;
       }
       if(['bond','double','triple'].includes(this.curTool)){
-        this.pushUndo();this.isDrawingBond=true;this.drawStart=atom||this.addAtom(pos.x,pos.y,'C');this.render();return;
+        // If clicking near an existing bond (not on an atom), cycle its type
+        if (!atom) {
+          const bond = this.findNearBond(pos.x, pos.y);
+          if (bond) { this.cycleBondType(bond); return; }
+        }
+        this.pushUndo();this.isDrawingBond=true;
+        this.drawStart=atom||this.addAtom(pos.x,pos.y,this.curElem);
+        this.render();return;
       }
     });
 
     c.addEventListener('mousemove', e => {
       if(!this.canvasReady) return;
-      const pos=this.mpos(e); this.mousePos=pos; this.hoverAtom=this.findNear(pos.x,pos.y);
+      const pos=this.mpos(e); this.mousePos=pos;
+      this.hoverAtom=this.findNear(pos.x,pos.y);
+      // Hover bond highlight (when in bond/eraser tool and not hovering an atom)
+      if (!this.hoverAtom && (this.curTool==='eraser' || ['bond','double','triple'].includes(this.curTool))) {
+        this.hoverBond = this.findNearBond(pos.x, pos.y);
+      } else {
+        this.hoverBond = null;
+      }
       if(this.isDragging&&this.dragTarget){this.dragTarget.x=pos.x;this.dragTarget.y=pos.y;}
       this.render();
     });
@@ -329,14 +434,25 @@ const DrawEngine = {
           const dist=Math.hypot(pos.x-this.drawStart.x,pos.y-this.drawStart.y);
           if(dist<10){const ba=this.findBestAngle(this.drawStart);snap.x=this.drawStart.x+Math.cos(ba)*this.BOND_LEN;snap.y=this.drawStart.y+Math.sin(ba)*this.BOND_LEN;}
           const st=this.findNear(snap.x,snap.y);
-          endAtom=(st&&st.id!==this.drawStart.id)?st:this.addAtom(snap.x,snap.y,'C');
+          endAtom=(st&&st.id!==this.drawStart.id)?st:this.addAtom(snap.x,snap.y,this.curElem);
         }
         if(endAtom&&endAtom.id!==this.drawStart.id) this.addBond(this.drawStart,endAtom,this.curBondType);
         this.isDrawingBond=false;this.drawStart=null;this.render();this.updateSmiles();
       }
     });
 
-    c.addEventListener('mouseleave', () => { this.hoverAtom=null; this.render(); });
+    c.addEventListener('mouseleave', () => { this.hoverAtom=null; this.hoverBond=null; this.render(); });
+
+    // Right-click to delete atom/bond (alternative to eraser)
+    c.addEventListener('contextmenu', e => {
+      e.preventDefault();
+      if(!this.canvasReady) return;
+      const pos = this.mpos(e);
+      const atom = this.findNear(pos.x, pos.y);
+      if (atom) { this.pushUndo(); this.removeAtom(atom); this.hoverAtom=null; this.render(); this.updateSmiles(); return; }
+      const bond = this.findNearBond(pos.x, pos.y);
+      if (bond) { this.pushUndo(); this.removeBond(bond); this.hoverBond=null; this.render(); this.updateSmiles(); }
+    });
 
     // Keyboard shortcuts
     document.addEventListener('keydown', e => {
@@ -345,11 +461,59 @@ const DrawEngine = {
       const km={v:'select','1':'bond','2':'double','3':'triple','5':'ring5','6':'ring6',b:'benzene',a:'atom',e:'eraser'};
       if(km[e.key]){this.setTool(km[e.key]);e.preventDefault();}
       if((e.ctrlKey||e.metaKey)&&e.key==='z'){this.popUndo();e.preventDefault();}
-      if(e.key==='Escape'&&this.isDrawingBond){
-        this.isDrawingBond=false;
-        if(this.drawStart&&this.atomDeg(this.drawStart)===0) this.atoms=this.atoms.filter(a=>a.id!==this.drawStart.id);
-        this.drawStart=null;this.popUndo();this.render();
+      if(e.key==='Delete'||e.key==='Backspace'){
+        // Delete hovered atom
+        if(this.hoverAtom){this.pushUndo();this.removeAtom(this.hoverAtom);this.hoverAtom=null;this.render();this.updateSmiles();e.preventDefault();}
+      }
+      if(e.key==='Escape'){
+        if(this.isDrawingBond){
+          this.isDrawingBond=false;
+          if(this.drawStart&&this.atomDeg(this.drawStart)===0) this.atoms=this.atoms.filter(a=>a.id!==this.drawStart.id);
+          this.drawStart=null;this.popUndo();this.render();
+        }
+        // Close atom popup if open
+        this._closeAtomPopup();
       }
     });
+  },
+
+  // ── Inline atom element popup (double-click to change element) ──
+  _atomPopup: null,
+
+  _showAtomPopup(atom, pos) {
+    this._closeAtomPopup();
+    const rect = this.canvas.getBoundingClientRect();
+    const popup = document.createElement('div');
+    popup.className = 'draw-atom-popup';
+    popup.style.left = (rect.left + atom.x + 18) + 'px';
+    popup.style.top = (rect.top + atom.y - 20) + 'px';
+    const elements = ['C','N','O','S','H','P','F','Cl','Br','I'];
+    for (const el of elements) {
+      const btn = document.createElement('button');
+      btn.textContent = el;
+      btn.className = 'atom-popup-btn' + (atom.elem === el ? ' current' : '');
+      btn.style.color = this.ECOLORS[el] || '#333';
+      btn.onclick = (ev) => {
+        ev.stopPropagation();
+        this.pushUndo();
+        atom.elem = el; atom.explicit = true;
+        this.render(); this.updateSmiles();
+        this._closeAtomPopup();
+      };
+      popup.appendChild(btn);
+    }
+    document.body.appendChild(popup);
+    this._atomPopup = popup;
+    // Close on outside click
+    setTimeout(() => {
+      const closer = (ev) => {
+        if (!popup.contains(ev.target)) { this._closeAtomPopup(); document.removeEventListener('mousedown', closer); }
+      };
+      document.addEventListener('mousedown', closer);
+    }, 10);
+  },
+
+  _closeAtomPopup() {
+    if (this._atomPopup) { this._atomPopup.remove(); this._atomPopup = null; }
   }
 };
