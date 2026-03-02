@@ -146,7 +146,7 @@ border-top:7px solid transparent;border-bottom:7px solid transparent;border-left
 border-radius:14px;text-align:center;white-space:nowrap}
 
 /* Bond changes */
-.cv-bond-changes{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:120px;max-width:170px}
+.cv-bond-changes{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:120px;max-width:200px;overflow-y:auto;max-height:260px}
 .cv-bond-group{display:flex;flex-wrap:wrap;gap:4px;justify-content:center}
 .cv-small-arrow{font-size:20px;color:#0057B8;font-weight:700}
 

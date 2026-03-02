@@ -488,9 +488,11 @@ const VisualizerApp = {
     const MOL_W = 260;
     const MOL_H = 260;
     const MARGIN = 50;
-    const COLS_PER_ROW = 3;
-    const STEP_BLOCK_W = 600;
-    const STEP_ROW_H = 450;
+    const BOND_PANEL_W = 180;  // width reserved for bond changes panel
+    const GAP = 25;            // gap between molecule and panel
+    const STEP_BLOCK_W = MOL_W + GAP + BOND_PANEL_W + GAP + MOL_W + 40; // ~810
+    const COLS_PER_ROW = 2;
+    const STEP_ROW_H = 460;
 
     // ── Title ──
     const isDOI = doi.startsWith('10.');
@@ -691,8 +693,8 @@ const VisualizerApp = {
       bondHTML += '</div>';
 
       this.addElement({
-        type: 'label', x: sx + MOL_W + 15, y: sy + 40,
-        html: `<div class="cv-bond-changes" id="${bondPanelId}">${bondHTML}</div>`
+        type: 'label', x: sx + MOL_W + GAP, y: sy + 40,
+        html: `<div class="cv-bond-changes" id="${bondPanelId}" style="width:${BOND_PANEL_W}px">${bondHTML}</div>`
       });
 
       // Attach event listeners
@@ -745,18 +747,19 @@ const VisualizerApp = {
       }, 50);
 
       // Product molecule — highlight with custom colors
+      const prodX = sx + MOL_W + GAP + BOND_PANEL_W + GAP;
       this.addElement({
-        type: 'molecule', x: sx + STEP_BLOCK_W - MOL_W - 20, y: sy + 36,
+        type: 'molecule', x: prodX, y: sy + 36,
         smiles: prodSmi, width: MOL_W, height: MOL_H,
         bondItems: bondState.bondItems, molRole: 'product',
         stepKey
       });
 
-      // Reagents label
+      // Reagents label (below bond panel)
       if (step['Reagents']) {
         this.addElement({
-          type: 'label', x: sx + MOL_W + 20, y: sy + MOL_H + 50,
-          html: `<div class="cv-reagent">${step['Reagents']}</div>`
+          type: 'label', x: sx + MOL_W + GAP, y: sy + MOL_H + 55,
+          html: `<div class="cv-reagent" style="max-width:${BOND_PANEL_W}px">${step['Reagents']}</div>`
         });
       }
 
@@ -765,12 +768,12 @@ const VisualizerApp = {
         const nextCol = visibleIdx % COLS_PER_ROW;
         if (nextCol > 0) {
           this.addElement({
-            type: 'label', x: sx + STEP_BLOCK_W - 20, y: sy + 90,
+            type: 'label', x: sx + STEP_BLOCK_W + 5, y: sy + MOL_H / 2,
             html: '<div class="cv-step-connector-h">⟶</div>'
           });
         } else {
           this.addElement({
-            type: 'label', x: sx + 430, y: sy + 250,
+            type: 'label', x: sx + STEP_BLOCK_W / 2, y: sy + STEP_ROW_H - 30,
             html: '<div class="cv-step-connector-v">↓ next row</div>'
           });
         }
@@ -1153,6 +1156,16 @@ const VisualizerApp = {
 
       const labelText = orderNum ? `#${orderNum}` : (mode === 'formed' ? 'F' : 'B');
 
+      // ── Compute perpendicular offset direction for label placement ──
+      // This ensures labels for the two atoms are on OPPOSITE sides
+      const dx = second.cx - first.cx;
+      const dy = second.cy - first.cy;
+      const bondLen = Math.sqrt(dx * dx + dy * dy) || 1;
+      // Perpendicular unit vector (rotated 90°)
+      const perpX = -dy / bondLen;
+      const perpY = dx / bondLen;
+      const labelOffset = vb[2] * 0.055; // distance from atom to label
+
       if (bond) {
         // ── Adjacent atoms → highlight the BOND between them ──
         const id1 = this._addSvgOverlay(svgEl, 'circle', {
@@ -1170,16 +1183,31 @@ const VisualizerApp = {
         });
         overlayIds.push(id1, id2, id3);
 
-        // Label with order number near midpoint
+        // Label order number near midpoint, offset perpendicular to bond
         const mx = (first.cx + second.cx) / 2;
         const my = (first.cy + second.cy) / 2;
         const id4 = this._addSvgOverlay(svgEl, 'text', {
-          x: mx, y: my - vb[3] * 0.03,
-          'text-anchor': 'middle', 'font-size': vb[2] * 0.04,
-          'font-weight': '700', 'font-family': 'sans-serif',
+          x: mx + perpX * labelOffset * 0.6, y: my + perpY * labelOffset * 0.6,
+          'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': vb[2] * 0.04, 'font-weight': '700', 'font-family': 'sans-serif',
           fill: color, _text: labelText
         });
         overlayIds.push(id4);
+
+        // Individual atom labels on OPPOSITE sides of the bond
+        const id5 = this._addSvgOverlay(svgEl, 'text', {
+          x: first.cx + perpX * labelOffset, y: first.cy + perpY * labelOffset,
+          'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': vb[2] * 0.03, 'font-weight': '600', 'font-family': 'sans-serif',
+          fill: color, _text: `${first.element}${first.idx + 1}`
+        });
+        const id6 = this._addSvgOverlay(svgEl, 'text', {
+          x: second.cx - perpX * labelOffset, y: second.cy - perpY * labelOffset,
+          'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': vb[2] * 0.03, 'font-weight': '600', 'font-family': 'sans-serif',
+          fill: color, _text: `${second.element}${second.idx + 1}`
+        });
+        overlayIds.push(id5, id6);
 
       } else {
         // ── Non-adjacent atoms → mark each individually ──
@@ -1194,18 +1222,18 @@ const VisualizerApp = {
         });
         overlayIds.push(id1, id2);
 
-        // Labels with atom index
+        // Labels on OPPOSITE sides: first atom label above-left, second atom label below-right
         const id3 = this._addSvgOverlay(svgEl, 'text', {
-          x: first.cx, y: first.cy - r - 2,
-          'text-anchor': 'middle', 'font-size': vb[2] * 0.035,
-          'font-weight': '600', 'font-family': 'sans-serif',
-          fill: color, _text: `${first.element}(${first.idx})`
+          x: first.cx + perpX * labelOffset, y: first.cy + perpY * labelOffset,
+          'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': vb[2] * 0.035, 'font-weight': '600', 'font-family': 'sans-serif',
+          fill: color, _text: `${first.element}(${first.idx + 1})`
         });
         const id4 = this._addSvgOverlay(svgEl, 'text', {
-          x: second.cx, y: second.cy - r - 2,
-          'text-anchor': 'middle', 'font-size': vb[2] * 0.035,
-          'font-weight': '600', 'font-family': 'sans-serif',
-          fill: color, _text: `${second.element}(${second.idx})`
+          x: second.cx - perpX * labelOffset, y: second.cy - perpY * labelOffset,
+          'text-anchor': 'middle', 'dominant-baseline': 'central',
+          'font-size': vb[2] * 0.035, 'font-weight': '600', 'font-family': 'sans-serif',
+          fill: color, _text: `${second.element}(${second.idx + 1})`
         });
         overlayIds.push(id3, id4);
       }
