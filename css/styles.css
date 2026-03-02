@@ -238,6 +238,10 @@ text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
 .search-result-step{font-size:11px;color:var(--muted);margin-top:2px}
 .search-result-highlight{display:inline-block;background:rgba(0,180,216,.12);color:var(--accent);
 font-size:10px;padding:1px 6px;border-radius:4px;margin-top:4px}
+.search-backend-badge{display:inline-flex;align-items:center;font-size:11px;font-weight:600;
+padding:3px 10px;border-radius:20px;margin-left:8px;white-space:nowrap}
+.search-backend-badge.online{background:rgba(0,196,140,.15);color:#00c48c;border:1px solid rgba(0,196,140,.3)}
+.search-backend-badge.offline{background:rgba(0,180,216,.1);color:var(--accent);border:1px solid rgba(0,180,216,.2)}
 
 /* Reagent label */
 .cv-reagent{font-size:10px;color:#888;font-style:italic;text-align:center;

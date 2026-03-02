@@ -86,14 +86,37 @@ function parseCSVLine(line) {
 
 // ═══════════════════════════════════════════
 //  Structure Search Module
-//  Draw molecular fragments and search via RDKit substructure matching
+//  Uses Python RDKit backend API if available, falls back to JS RDKit
 // ═══════════════════════════════════════════
 const StructureSearch = {
   db: [],
   ketcherLoaded: false,
+  // Backend API URL — set to your server. Falls back to JS RDKit if unreachable.
+  API_URL: 'https://kekule.matter.toronto.edu/api',
 
   init(data) {
     this.db = data || [];
+    this._checkBackend();
+  },
+
+  // Check if Python backend is available
+  async _checkBackend() {
+    try {
+      const resp = await fetch(`${this.API_URL}/health`, { signal: AbortSignal.timeout(3000) });
+      if (resp.ok) {
+        const info = await resp.json();
+        console.log(`[StructureSearch] Python backend online. ${info.entries} entries.`);
+        this.backendAvailable = true;
+        // Show backend status badge
+        const badge = document.getElementById('searchBackendBadge');
+        if (badge) { badge.textContent = '🐍 Python RDKit'; badge.className = 'search-backend-badge online'; }
+      }
+    } catch (e) {
+      console.log('[StructureSearch] Python backend offline, using JS RDKit.');
+      this.backendAvailable = false;
+      const badge = document.getElementById('searchBackendBadge');
+      if (badge) { badge.textContent = '⚡ JS RDKit (local)'; badge.className = 'search-backend-badge offline'; }
+    }
   },
 
   // Load Ketcher in the search page iframe
@@ -120,9 +143,7 @@ const StructureSearch = {
         return;
       }
       let smiles = '';
-      if (ketcher.getSmiles) {
-        smiles = await ketcher.getSmiles();
-      }
+      if (ketcher.getSmiles) smiles = await ketcher.getSmiles();
       if (smiles && smiles.trim()) {
         document.getElementById('searchSmilesInput').value = smiles.trim();
         toast(`Got SMILES: ${smiles.trim()}`, 'success');
@@ -130,111 +151,109 @@ const StructureSearch = {
         toast('No structure drawn. Please draw a molecule fragment first.', 'info');
       }
     } catch (e) {
-      console.warn('Ketcher API error:', e);
       toast('Could not get SMILES from editor. Type SMILES manually.', 'error');
     }
   },
 
-  // Run substructure search using RDKit
-  runSearch() {
+  // Run substructure search — Python backend first, JS fallback
+  async runSearch() {
     const query = document.getElementById('searchSmilesInput')?.value?.trim();
-    if (!query) {
-      toast('Please enter a SMILES or SMARTS query', 'info');
-      return;
-    }
-
-    if (!ChemEngine.ready) {
-      toast('RDKit is not ready yet', 'error');
-      return;
-    }
+    if (!query) { toast('Please enter a SMILES or SMARTS query', 'info'); return; }
 
     const resultsDiv = document.getElementById('searchResults');
     const countSpan = document.getElementById('searchResultCount');
     if (!resultsDiv) return;
 
-    // Try as SMARTS first, then as SMILES
-    let qmol = null;
-    try {
-      qmol = ChemEngine.rdkit.get_qmol(query);
-      if (!qmol || !qmol.is_valid()) {
-        if (qmol) qmol.delete();
-        qmol = null;
-      }
-    } catch (e) { qmol = null; }
+    resultsDiv.innerHTML = '<div class="search-placeholder">Searching...</div>';
 
-    if (!qmol) {
+    // ── Try Python backend first ────────────────────────────────────────────
+    if (this.backendAvailable) {
       try {
-        const mol = ChemEngine.rdkit.get_mol(query);
-        if (mol && mol.is_valid()) {
-          // Convert to SMARTS-like query
-          qmol = ChemEngine.rdkit.get_qmol(query);
+        const resp = await fetch(`${this.API_URL}/search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ smiles: query, limit: 200 }),
+          signal: AbortSignal.timeout(15000)
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          if (countSpan) countSpan.textContent = `(${data.count} found)`;
+          if (data.count === 0) {
+            resultsDiv.innerHTML = '<div class="search-placeholder">No matching molecules found.</div>';
+            return;
+          }
+          let html = '';
+          for (const m of data.results) {
+            const svg = m.svg || ChemEngine.getSvg(m.smiles, 80, 80) || '';
+            const doi = m.doi || 'Unknown';
+            const truncSmiles = m.smiles.length > 60 ? m.smiles.substring(0, 57) + '...' : m.smiles;
+            html += `<div class="search-result-card" onclick="goPage('data');document.getElementById('searchInput').value='${doi.replace(/'/g, "\\'")}';DataApp.applyFilters()">
+              <div class="search-result-mol">${svg}</div>
+              <div class="search-result-info">
+                <div class="search-result-doi">${doi}</div>
+                <div class="search-result-smiles" title="${m.smiles}">${truncSmiles}</div>
+                <div class="search-result-step">Step ${m.step} · ${m.role === 'SM' ? 'Starting Material' : 'Product'}</div>
+                <span class="search-result-highlight">🐍 Python RDKit match</span>
+              </div>
+            </div>`;
+          }
+          resultsDiv.innerHTML = html;
+          toast(`Found ${data.count} matching molecules`, 'success');
+          return;
         }
-        if (mol) mol.delete();
-      } catch (e) {}
+      } catch (e) {
+        console.warn('[StructureSearch] Backend search failed, falling back to JS:', e);
+        this.backendAvailable = false;
+      }
     }
 
-    if (!qmol) {
-      toast('Invalid SMILES/SMARTS query', 'error');
-      return;
-    }
+    // ── JS RDKit fallback ───────────────────────────────────────────────────
+    if (!ChemEngine.ready) { toast('RDKit is not ready yet', 'error'); return; }
 
-    // Search all entries
+    let qmol = null;
+    try { qmol = ChemEngine.rdkit.get_qmol(query); if (!qmol?.is_valid()) { if (qmol) qmol.delete(); qmol = null; } } catch (e) {}
+    if (!qmol) { try { qmol = ChemEngine.rdkit.get_qmol(query); } catch (e) {} }
+    if (!qmol) { toast('Invalid SMILES/SMARTS query', 'error'); return; }
+
     const matches = [];
     const seen = new Set();
-
     for (const entry of this.db) {
       for (const field of ['SMILES SM', 'SMILES Product']) {
         const smiles = entry[field];
         if (!smiles || ChemEngine.isTemplateSMILES(smiles)) continue;
-
         const key = `${smiles}_${entry['Paper DOI']}_${entry['Step']}`;
         if (seen.has(key)) continue;
-
         let mol = null;
         try {
           mol = ChemEngine.rdkit.get_mol(smiles);
-          if (mol && mol.is_valid()) {
-            const match = mol.get_substruct_match(qmol);
-            if (match && match !== '{}') {
-              seen.add(key);
-              matches.push({
-                entry,
-                field,
-                smiles,
-                matchData: match
-              });
-            }
+          if (mol?.is_valid() && mol.get_substruct_match(qmol) !== '{}') {
+            seen.add(key);
+            matches.push({ entry, field, smiles });
           }
-        } catch (e) {}
-        finally { if (mol) mol.delete(); }
+        } catch (e) {} finally { if (mol) mol.delete(); }
       }
     }
-
     qmol.delete();
 
-    // Render results
     if (countSpan) countSpan.textContent = `(${matches.length} found)`;
-
     if (matches.length === 0) {
-      resultsDiv.innerHTML = '<div class="search-placeholder">No matching molecules found for this substructure.</div>';
+      resultsDiv.innerHTML = '<div class="search-placeholder">No matching molecules found.</div>';
       return;
     }
-
     let html = '';
-    for (const m of matches.slice(0, 200)) { // limit to 200 results
+    for (const m of matches.slice(0, 200)) {
       const svg = ChemEngine.getSvg(m.smiles, 80, 80) || '';
       const doi = m.entry['Paper DOI'] || 'Unknown';
       const step = m.entry['Step'] || '?';
       const role = m.field === 'SMILES SM' ? 'Starting Material' : 'Product';
       const truncSmiles = m.smiles.length > 60 ? m.smiles.substring(0, 57) + '...' : m.smiles;
-
       html += `<div class="search-result-card" onclick="goPage('data');document.getElementById('searchInput').value='${doi.replace(/'/g, "\\'")}';DataApp.applyFilters()">
         <div class="search-result-mol">${svg}</div>
         <div class="search-result-info">
           <div class="search-result-doi">${doi}</div>
           <div class="search-result-smiles" title="${m.smiles}">${truncSmiles}</div>
           <div class="search-result-step">Step ${step} · ${role}</div>
-          <span class="search-result-highlight">Substructure match</span>
+          <span class="search-result-highlight">⚡ JS RDKit match</span>
         </div>
       </div>`;
     }
