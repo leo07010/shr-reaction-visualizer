@@ -6,7 +6,8 @@ FROM continuumio/miniconda3:latest
 WORKDIR /app
 
 # Install RDKit via conda (most reliable method)
-RUN conda install -y -c conda-forge rdkit python=3.11 && \
+# Pin numpy<2.0 to avoid X86_V2 CPU requirement on older servers
+RUN conda install -y -c conda-forge rdkit python=3.11 "numpy<2.0" && \
     conda clean -afy
 
 # Install Python dependencies
