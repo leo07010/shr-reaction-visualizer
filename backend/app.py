@@ -1,9 +1,10 @@
 """
 SHR Reaction Visualizer - Python RDKit Backend
 Flask API for substructure search using RDKit
+Also serves the static frontend files (HTML, JS, CSS)
 """
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from rdkit import Chem
 from rdkit.Chem import Draw, AllChem
@@ -13,8 +14,11 @@ import os
 import csv
 import io
 
-app = Flask(__name__)
-CORS(app)  # Allow cross-origin requests from the frontend
+# Static frontend files are one directory up from backend/
+FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+
+app = Flask(__name__, static_folder=FRONTEND_DIR, static_url_path='')
+CORS(app)  # Allow cross-origin requests
 
 # ─── Load reaction data ─────────────────────────────────────────────────────
 DATA_DIR = os.path.join(os.path.dirname(__file__), '..', 'data')
@@ -160,6 +164,24 @@ def mol_svg():
 def get_data():
     """Return all reaction data (for frontend)."""
     return jsonify(REACTION_DATA)
+
+
+# ─── Serve frontend static files ─────────────────────────────────────────────
+
+@app.route('/')
+def serve_index():
+    """Serve the main index.html page."""
+    return send_from_directory(FRONTEND_DIR, 'index.html')
+
+
+@app.route('/<path:path>')
+def serve_static(path):
+    """Serve static files (JS, CSS, data, etc.)."""
+    file_path = os.path.join(FRONTEND_DIR, path)
+    if os.path.isfile(file_path):
+        return send_from_directory(FRONTEND_DIR, path)
+    # Fallback to index.html for SPA routing
+    return send_from_directory(FRONTEND_DIR, 'index.html')
 
 
 if __name__ == '__main__':

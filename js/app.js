@@ -91,8 +91,8 @@ function parseCSVLine(line) {
 const StructureSearch = {
   db: [],
   ketcherLoaded: false,
-  // Backend API URL — set to your server. Falls back to JS RDKit if unreachable.
-  API_URL: 'https://kekule.matter.toronto.edu/api',
+  // Backend API URL — auto-detect from current server. Falls back to JS RDKit if unreachable.
+  API_URL: window.location.origin + '/api',
 
   init(data) {
     this.db = data || [];
