@@ -351,8 +351,8 @@ const ChemEngine = {
 
       // Add numbered circles on atoms for bondItems with order numbers
       if (Object.keys(atomBondOrderMap).length > 0) {
-        // Get precise atom positions from the SAME mol object
-        const atomPositions = this._getAtomPositionsFromMol(mol, atoms.length);
+        // Get precise atom positions using SAME dimensions as the final SVG
+        const atomPositions = this._getAtomPositionsFromMol(mol, atoms.length, sw, sh, fontSize, lineWidth);
         if (atomPositions) {
           svg = this._addNumberedAtomCircles(svg, atomPositions, atomBondOrderMap);
         }
@@ -414,21 +414,28 @@ const ChemEngine = {
 
   // ═══════════════════════════════════════════
   //  Get precise atom positions by rendering a probe SVG with all atoms highlighted
-  //  Uses the SAME mol object to ensure coordinate consistency
+  //  Uses the SAME mol object AND SAME dimensions as the final SVG
   //  Returns: [{idx, cx, cy}] or null
   // ═══════════════════════════════════════════
-  _getAtomPositionsFromMol(mol, nAtoms) {
+  _getAtomPositionsFromMol(mol, nAtoms, w, h, atomLabelFontSize, bondLineWidth) {
     try {
       // Render an SVG with ALL atoms highlighted as tiny dots — just to extract their screen positions
+      // CRITICAL: use the SAME width/height/padding as the final SVG so coordinates match
       const allIdx = [];
       const colors = {};
       const radii = {};
       for (let i = 0; i < nAtoms; i++) {
         allIdx.push(i);
         colors[i] = [0.95, 0.95, 0.95];
-        radii[i] = 0.25; // Same radius as getAtomBondData to ensure ellipses are rendered
+        radii[i] = 0.25;
       }
       const probeDetails = JSON.stringify({
+        width: w || undefined,
+        height: h || undefined,
+        atomLabelFontSize: atomLabelFontSize || undefined,
+        bondLineWidth: bondLineWidth || undefined,
+        multipleBondOffset: 0.2,
+        padding: 0.12,
         clearBackground: false,
         atoms: allIdx,
         highlightAtomColors: colors,
@@ -443,7 +450,6 @@ const ChemEngine = {
       const parser = new DOMParser();
       const doc = parser.parseFromString(probeSvg, 'image/svg+xml');
       let ellipses = doc.querySelectorAll('ellipse');
-      // ellipses found for atom position extraction
 
       if (ellipses.length < nAtoms) {
         // Fallback: try molblock coordinate mapping
