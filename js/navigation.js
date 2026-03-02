@@ -18,8 +18,8 @@ function goPage(name) {
     DataApp.renderTable();
     DataApp.updateStats();
   }
-  if (name === 'search' && typeof StructureSearch !== 'undefined') {
-    StructureSearch.loadKetcher();
+  if (name === 'search' && typeof DrawEngine !== 'undefined') {
+    DrawEngine.resize();
   }
 }
 

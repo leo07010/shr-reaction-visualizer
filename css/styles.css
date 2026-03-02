@@ -201,26 +201,37 @@ border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;transition:.15s;
 .draw-btn:hover{border-color:var(--accent);background:rgba(0,180,216,.1)}
 
 /* === Ketcher Modal === */
-.ketcher-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:400;
-align-items:center;justify-content:center;backdrop-filter:blur(4px)}
-.ketcher-overlay.on{display:flex}
-.ketcher-modal{background:var(--card);border:1px solid var(--border);border-radius:12px;
-width:90vw;height:85vh;max-width:1200px;display:flex;flex-direction:column;animation:popIn .25s ease;overflow:hidden}
-.ketcher-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)}
-.ketcher-header h3{font-size:16px;font-weight:700;margin:0}
-.ketcher-actions{display:flex;gap:8px;align-items:center}
-.ketcher-close{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:4px 8px;border-radius:6px;transition:.15s}
-.ketcher-close:hover{color:var(--text);background:rgba(255,255,255,.06)}
-
 /* === Structure Search Page === */
 .search-wrap{display:flex;gap:24px;padding:24px;height:calc(100vh - 60px);overflow:hidden}
-.search-draw-panel{flex:0 0 55%;display:flex;flex-direction:column;gap:12px}
+.search-draw-panel{flex:0 0 58%;display:flex;flex-direction:column;gap:10px}
 .search-draw-panel h4{font-size:16px;font-weight:700;margin:0}
 .search-desc{font-size:13px;color:var(--muted);margin:0}
 .search-input-row{display:flex;gap:8px;align-items:center}
 .search-input-row .fr-input{flex:1}
-.search-ketcher-wrap{flex:1;min-height:300px}
-.search-actions{display:flex;gap:8px}
+
+/* Drawing Toolbar */
+.draw-tb{width:44px;background:var(--card);border:1px solid var(--border);border-radius:10px;
+display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:2px;flex-shrink:0}
+.dtb-btn{width:36px;height:36px;border:none;background:transparent;color:var(--muted);border-radius:7px;
+cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;flex-shrink:0}
+.dtb-btn:hover{background:rgba(255,255,255,.06);color:var(--text)}
+.dtb-btn.on{background:rgba(0,180,216,.15);color:var(--accent)}
+.dtb-sep{width:28px;height:1px;background:var(--border);margin:3px 0;flex-shrink:0}
+
+/* Drawing Canvas */
+.draw-canvas-wrap{flex:1;background:#fff;border-radius:10px;border:1px solid var(--border);position:relative;overflow:hidden}
+.draw-canvas-wrap canvas{display:block;position:absolute;inset:0}
+
+/* Status bar with live SMILES + element buttons */
+.draw-status-bar{display:flex;align-items:center;gap:10px;padding:8px 0;flex-shrink:0}
+.draw-live-smiles{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;
+padding:6px 10px;font-family:'Courier New',monospace;font-size:11px;color:var(--muted);
+overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.draw-elem-grid{display:flex;gap:3px;flex-shrink:0}
+.draw-elem-grid .el-btn{padding:4px 6px;border:1px solid var(--border);background:var(--bg);color:var(--text);
+border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;text-align:center;transition:.15s;min-width:26px}
+.draw-elem-grid .el-btn:hover{border-color:var(--accent);color:var(--accent)}
+.draw-elem-grid .el-btn.on{background:rgba(0,180,216,.15);border-color:var(--accent);color:var(--accent)}
 .search-results-panel{flex:1;display:flex;flex-direction:column;gap:12px;overflow:hidden}
 .search-results-panel h4{font-size:16px;font-weight:700;margin:0}
 .search-results{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
