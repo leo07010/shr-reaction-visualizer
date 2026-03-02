@@ -90,15 +90,15 @@ function parseCSVLine(line) {
 // ═══════════════════════════════════════════
 const StructureSearch = {
   db: [],
-  jsmeApplet: null,
-  jsmeReady: false,
+  ketcherReady: false,
+  ketcherObj: null,
   // Backend API URL — auto-detect from current server. Falls back to JS RDKit if unreachable.
   API_URL: window.location.origin + '/api',
 
   init(data) {
     this.db = data || [];
     this._checkBackend();
-    this._initJSME();
+    this._initKetcher();
   },
 
   // Check if Python backend is available
@@ -120,55 +120,90 @@ const StructureSearch = {
     }
   },
 
-  // Initialize JSME molecular editor
-  _initJSME() {
-    // JSME global callback — called when JSME is fully loaded
-    window.jsmeOnLoad = () => {
-      console.log('[StructureSearch] JSME loaded, creating applet...');
-      const container = document.getElementById('jsmeContainer');
-      if (!container) return;
-      this.jsmeApplet = new JSApplet.JSME('jsmeContainer', '100%', '100%', {
-        options: 'query,hydrogens,nocanonize,atommovecheck'
-      });
-      this.jsmeReady = true;
-      // Auto-update SMILES when user modifies the structure
-      this.jsmeApplet.setCallBack('AfterStructureModified', (event) => {
-        const smiles = event.src.smiles();
-        if (smiles && smiles.trim()) {
-          document.getElementById('searchSmilesInput').value = smiles.trim();
+  // Initialize Ketcher molecular editor in iframe
+  _initKetcher() {
+    const frame = document.getElementById('ketcherSearchFrame');
+    if (!frame) return;
+    const loadingDiv = document.getElementById('ketcherSearchLoading');
+
+    frame.addEventListener('load', () => {
+      // Wait for Ketcher to fully initialize inside the iframe
+      const checkKetcher = setInterval(() => {
+        try {
+          const ketcherInstance = frame.contentWindow.ketcher;
+          if (ketcherInstance) {
+            clearInterval(checkKetcher);
+            this.ketcherObj = ketcherInstance;
+            this.ketcherReady = true;
+            if (loadingDiv) loadingDiv.style.display = 'none';
+            console.log('[StructureSearch] Ketcher editor ready.');
+          }
+        } catch (e) {
+          // Cross-origin — Ketcher not ready yet, keep polling
         }
-      });
-      console.log('[StructureSearch] JSME editor ready.');
-    };
+      }, 500);
+
+      // Stop polling after 30 seconds
+      setTimeout(() => {
+        clearInterval(checkKetcher);
+        if (!this.ketcherReady && loadingDiv) {
+          loadingDiv.textContent = 'Ketcher loaded. Click "Get SMILES" after drawing.';
+          loadingDiv.style.display = 'none';
+        }
+      }, 30000);
+    });
   },
 
-  // Get SMILES from JSME editor and copy to input
-  getFromEditor() {
-    if (!this.jsmeApplet || !this.jsmeReady) {
+  // Get SMILES from Ketcher editor
+  async getFromEditor() {
+    const frame = document.getElementById('ketcherSearchFrame');
+    if (!frame || !frame.contentWindow) {
       toast('Editor is still loading...', 'info');
       return;
     }
-    const smiles = this.jsmeApplet.smiles();
-    if (smiles && smiles.trim()) {
-      const input = document.getElementById('searchSmilesInput');
-      if (input) input.value = smiles.trim();
-      // Copy to clipboard
-      navigator.clipboard.writeText(smiles.trim()).then(() => {
-        toast(`SMILES copied: ${smiles.trim()}`, 'success');
-      }).catch(() => {
-        toast(`SMILES: ${smiles.trim()}`, 'success');
-      });
-    } else {
-      toast('No structure drawn. Please draw a molecule first.', 'info');
+    try {
+      const ketcher = frame.contentWindow.ketcher;
+      if (!ketcher) {
+        toast('Ketcher is still initializing. Please wait a moment.', 'info');
+        return;
+      }
+      let smiles = '';
+      // Try modern API first (getSmiles), then legacy (getSmilesAsync)
+      if (typeof ketcher.getSmiles === 'function') {
+        smiles = await ketcher.getSmiles();
+      } else if (typeof ketcher.getSmilesAsync === 'function') {
+        smiles = await ketcher.getSmilesAsync();
+      }
+      if (smiles && smiles.trim()) {
+        const input = document.getElementById('searchSmilesInput');
+        if (input) input.value = smiles.trim();
+        // Copy to clipboard
+        navigator.clipboard.writeText(smiles.trim()).then(() => {
+          toast(`SMILES copied: ${smiles.trim()}`, 'success');
+        }).catch(() => {
+          toast(`SMILES: ${smiles.trim()}`, 'success');
+        });
+      } else {
+        toast('No structure drawn. Please draw a molecule first.', 'info');
+      }
+    } catch (e) {
+      console.error('[StructureSearch] getFromEditor error:', e);
+      toast('Could not get SMILES. Try drawing a structure first.', 'error');
     }
   },
 
-  // Clear the JSME editor
-  clearEditor() {
-    if (this.jsmeApplet && this.jsmeReady) {
-      this.jsmeApplet.reset();
+  // Clear the Ketcher editor
+  async clearEditor() {
+    try {
+      const frame = document.getElementById('ketcherSearchFrame');
+      const ketcher = frame?.contentWindow?.ketcher;
+      if (ketcher && typeof ketcher.setMolecule === 'function') {
+        await ketcher.setMolecule('');
+      }
       document.getElementById('searchSmilesInput').value = '';
       toast('Editor cleared', 'info');
+    } catch (e) {
+      toast('Could not clear editor.', 'error');
     }
   },
 
