@@ -179,7 +179,27 @@ const VisualizerApp = {
 
   resetView() {
     this.scale = 1;
-    this.canvasOffset = { x: 0, y: 0 };
+    // Center content instead of resetting to top-left
+    if (this.elements && this.elements.length) {
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const el of this.elements) {
+        const x = parseInt(el.style.left) || 0;
+        const y = parseInt(el.style.top) || 0;
+        const w = el.offsetWidth || 150;
+        const h = el.offsetHeight || 150;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x + w > maxX) maxX = x + w;
+        if (y + h > maxY) maxY = y + h;
+      }
+      const contentW = maxX - minX + 80;
+      const contentH = maxY - minY + 80;
+      const rect = this.canvas.getBoundingClientRect();
+      this.canvasOffset.x = (rect.width - contentW * this.scale) / 2 - minX * this.scale + 40;
+      this.canvasOffset.y = (rect.height - contentH * this.scale) / 2 - minY * this.scale + 40;
+    } else {
+      this.canvasOffset = { x: 0, y: 0 };
+    }
     this.applyCanvasTransform();
     this.updateZoomLabel();
   },
@@ -790,7 +810,7 @@ const VisualizerApp = {
         <button class="cv-bond-add-btn cv-bond-add-broken" data-step="${stepKey}" data-type="broken" title="Add Broken bond">+ Broken</button>
       </div>`;
 
-      if (autoDetected && (autoDetected.formed.length || autoDetected.broken.length)) {
+      if (mcsData || (!alternatingBonds.length && smSmi && prodSmi)) {
         bondHTML += '<div class="cv-bond-source">Auto-detected</div>';
       }
       bondHTML += '</div>';
