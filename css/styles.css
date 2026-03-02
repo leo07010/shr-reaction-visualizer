@@ -222,16 +222,25 @@ cursor:pointer;display:flex;align-items:center;justify-content:center;transition
 .draw-canvas-wrap{flex:1;background:#fff;border-radius:10px;border:1px solid var(--border);position:relative;overflow:hidden}
 .draw-canvas-wrap canvas{display:block;position:absolute;inset:0}
 
-/* Status bar with live SMILES + element buttons */
-.draw-status-bar{display:flex;align-items:center;gap:10px;padding:8px 0;flex-shrink:0}
-.draw-live-smiles{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:6px;
-padding:6px 10px;font-family:'Courier New',monospace;font-size:11px;color:var(--muted);
+/* Bottom bar: SMILES + Atoms + Functional Groups */
+.draw-bottom-bar{display:flex;flex-direction:column;gap:6px;padding:8px 0;flex-shrink:0}
+.draw-live-smiles{background:var(--bg);border:1px solid var(--border);border-radius:6px;
+padding:7px 12px;font-family:'Courier New',monospace;font-size:12px;color:var(--muted);
 overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.draw-elem-grid{display:flex;gap:3px;flex-shrink:0}
-.draw-elem-grid .el-btn{padding:4px 6px;border:1px solid var(--border);background:var(--bg);color:var(--text);
-border-radius:5px;cursor:pointer;font-size:11px;font-weight:600;text-align:center;transition:.15s;min-width:26px}
-.draw-elem-grid .el-btn:hover{border-color:var(--accent);color:var(--accent)}
-.draw-elem-grid .el-btn.on{background:rgba(0,180,216,.15);border-color:var(--accent);color:var(--accent)}
+.draw-bar-label{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;flex-shrink:0}
+.draw-elem-section,.draw-frag-section{display:flex;align-items:center;gap:8px}
+.draw-elem-grid{display:flex;gap:4px;flex-wrap:wrap}
+.draw-elem-grid .el-btn{width:36px;height:32px;border:1.5px solid var(--border);background:var(--bg);
+border-radius:6px;cursor:pointer;font-size:14px;font-weight:700;text-align:center;transition:.15s;
+display:flex;align-items:center;justify-content:center}
+.draw-elem-grid .el-btn:hover{background:rgba(255,255,255,.08);transform:translateY(-1px)}
+.draw-elem-grid .el-btn.on{background:rgba(0,180,216,.18);border-color:var(--accent);box-shadow:0 0 8px rgba(0,180,216,.25)}
+.draw-frag-grid{display:flex;gap:4px;flex-wrap:wrap}
+.draw-frag-grid .fg-btn{height:30px;padding:0 10px;border:1px solid var(--border);background:var(--bg);color:var(--text);
+border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;text-align:center;transition:.15s;white-space:nowrap;
+display:flex;align-items:center;justify-content:center}
+.draw-frag-grid .fg-btn:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,180,216,.06)}
+.draw-frag-grid .fg-btn.on{background:rgba(0,180,216,.18);border-color:var(--accent);color:var(--accent);box-shadow:0 0 8px rgba(0,180,216,.25)}
 .search-results-panel{flex:1;display:flex;flex-direction:column;gap:12px;overflow:hidden}
 .search-results-panel h4{font-size:16px;font-weight:700;margin:0}
 .search-results{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:8px}

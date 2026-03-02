@@ -222,19 +222,37 @@ Drag to move · Edge to resize · Click two atoms to mark bond · Drag blank are
 <div class="draw-canvas-wrap" id="drawCanvasArea">
 <canvas id="drawCanvas"></canvas>
 </div>
-<div class="draw-status-bar">
+<div class="draw-bottom-bar">
 <div class="draw-live-smiles" id="drawLiveSmiles">Draw a molecule...</div>
+<div class="draw-elem-section">
+<span class="draw-bar-label">Atoms</span>
 <div class="draw-elem-grid" id="drawElemGrid">
-<button class="el-btn on" data-e="C">C</button>
-<button class="el-btn" data-e="N">N</button>
-<button class="el-btn" data-e="O">O</button>
-<button class="el-btn" data-e="S">S</button>
-<button class="el-btn" data-e="H">H</button>
-<button class="el-btn" data-e="P">P</button>
-<button class="el-btn" data-e="F">F</button>
-<button class="el-btn" data-e="Cl">Cl</button>
-<button class="el-btn" data-e="Br">Br</button>
-<button class="el-btn" data-e="I">I</button>
+<button class="el-btn on" data-e="C" style="color:#333;border-color:#666">C</button>
+<button class="el-btn" data-e="N" style="color:#3465a4;border-color:#3465a4">N</button>
+<button class="el-btn" data-e="O" style="color:#cc0000;border-color:#cc0000">O</button>
+<button class="el-btn" data-e="S" style="color:#c4a000;border-color:#c4a000">S</button>
+<button class="el-btn" data-e="H" style="color:#888;border-color:#888">H</button>
+<button class="el-btn" data-e="P" style="color:#ff8000;border-color:#ff8000">P</button>
+<button class="el-btn" data-e="F" style="color:#00cc00;border-color:#00cc00">F</button>
+<button class="el-btn" data-e="Cl" style="color:#00aa00;border-color:#00aa00">Cl</button>
+<button class="el-btn" data-e="Br" style="color:#a52a2a;border-color:#a52a2a">Br</button>
+<button class="el-btn" data-e="I" style="color:#940094;border-color:#940094">I</button>
+</div>
+</div>
+<div class="draw-frag-section">
+<span class="draw-bar-label">Groups</span>
+<div class="draw-frag-grid" id="drawFragGrid">
+<button class="fg-btn" data-fg="OH" title="Hydroxyl">−OH</button>
+<button class="fg-btn" data-fg="NH2" title="Amino">−NH₂</button>
+<button class="fg-btn" data-fg="CHO" title="Aldehyde">−CHO</button>
+<button class="fg-btn" data-fg="COOH" title="Carboxyl">−COOH</button>
+<button class="fg-btn" data-fg="NO2" title="Nitro">−NO₂</button>
+<button class="fg-btn" data-fg="CN" title="Cyano">−CN</button>
+<button class="fg-btn" data-fg="CF3" title="Trifluoromethyl">−CF₃</button>
+<button class="fg-btn" data-fg="SH" title="Thiol">−SH</button>
+<button class="fg-btn" data-fg="SO3H" title="Sulfonic acid">−SO₃H</button>
+<button class="fg-btn" data-fg="PO4" title="Phosphate">PO₄</button>
+</div>
 </div>
 </div>
 </div>

@@ -132,11 +132,20 @@ const StructureSearch = {
       DrawEngine.setTool(t);
     });
 
-    // Element grid click handlers
+    // Element grid click handlers — auto-switches to atom tool
     document.getElementById('drawElemGrid')?.addEventListener('click', e => {
       const btn = e.target.closest('.el-btn');
       if (!btn) return;
+      DrawEngine.curFragment = null;
+      document.querySelectorAll('#drawFragGrid .fg-btn').forEach(b => b.classList.remove('on'));
       DrawEngine.setElem(btn.dataset.e);
+    });
+
+    // Functional group grid click handlers
+    document.getElementById('drawFragGrid')?.addEventListener('click', e => {
+      const btn = e.target.closest('.fg-btn');
+      if (!btn) return;
+      DrawEngine.setFragment(btn.dataset.fg);
     });
   },
 

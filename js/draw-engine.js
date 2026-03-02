@@ -109,7 +109,62 @@ const DrawEngine = {
 
   setElem(el) {
     this.curElem = el;
+    // Auto-switch to atom tool so clicking canvas immediately places this element
+    this.setTool('atom');
     document.querySelectorAll('#drawElemGrid .el-btn').forEach(b => b.classList.toggle('on', b.dataset.e === el));
+  },
+
+  // ── Place functional group fragment at click position ──
+  FRAGMENTS: {
+    'OH':   { atoms:[{e:'O',x:0,y:0},{e:'H',x:30,y:-20}], bonds:[[0,1,'single']] },
+    'NH2':  { atoms:[{e:'N',x:0,y:0},{e:'H',x:-25,y:-25},{e:'H',x:25,y:-25}], bonds:[[0,1,'single'],[0,2,'single']] },
+    'CHO':  { atoms:[{e:'C',x:0,y:0},{e:'H',x:-30,y:-20},{e:'O',x:30,y:-20}], bonds:[[0,1,'single'],[0,2,'double']] },
+    'COOH': { atoms:[{e:'C',x:0,y:0},{e:'O',x:-30,y:-25},{e:'O',x:30,y:-25},{e:'H',x:50,y:-5}], bonds:[[0,1,'double'],[0,2,'single'],[2,3,'single']] },
+    'NO2':  { atoms:[{e:'N',x:0,y:0},{e:'O',x:-30,y:-25},{e:'O',x:30,y:-25}], bonds:[[0,1,'double'],[0,2,'single']] },
+    'SO3H': { atoms:[{e:'S',x:0,y:0},{e:'O',x:-35,y:-20},{e:'O',x:35,y:-20},{e:'O',x:0,y:35},{e:'H',x:25,y:45}], bonds:[[0,1,'double'],[0,2,'double'],[0,3,'single'],[3,4,'single']] },
+    'CF3':  { atoms:[{e:'C',x:0,y:0},{e:'F',x:-30,y:-25},{e:'F',x:30,y:-25},{e:'F',x:0,y:30}], bonds:[[0,1,'single'],[0,2,'single'],[0,3,'single']] },
+    'CN':   { atoms:[{e:'C',x:0,y:0},{e:'N',x:35,y:0}], bonds:[[0,1,'triple']] },
+    'SH':   { atoms:[{e:'S',x:0,y:0},{e:'H',x:30,y:-20}], bonds:[[0,1,'single']] },
+    'PO4':  { atoms:[{e:'P',x:0,y:0},{e:'O',x:-35,y:-20},{e:'O',x:35,y:-20},{e:'O',x:0,y:35},{e:'O',x:0,y:-35}], bonds:[[0,1,'single'],[0,2,'single'],[0,3,'single'],[0,4,'double']] },
+  },
+
+  placeFragment(name, cx, cy) {
+    const frag = this.FRAGMENTS[name];
+    if (!frag) return;
+    this.pushUndo();
+    const placed = [];
+    for (const a of frag.atoms) {
+      placed.push(this.addAtom(cx + a.x, cy + a.y, a.e, true));
+    }
+    for (const [i, j, t] of frag.bonds) {
+      this.addBond(placed[i], placed[j], t);
+    }
+    // Auto-bond first atom of fragment to nearest existing atom if close enough
+    if (placed.length > 0) {
+      const first = placed[0];
+      let nearest = null, nd = this.SNAP_R * 1.5;
+      for (const a of this.atoms) {
+        if (placed.includes(a)) continue;
+        const d = Math.hypot(a.x - first.x, a.y - first.y);
+        if (d < nd) { nearest = a; nd = d; }
+      }
+      if (nearest) this.addBond(nearest, first, 'single');
+    }
+    this.render();
+    this.updateSmiles();
+  },
+
+  curFragment: null,
+
+  setFragment(name) {
+    this.curFragment = name;
+    this.curTool = 'fragment';
+    this.canvas.style.cursor = 'crosshair';
+    // Update toolbar — deselect all tool buttons
+    document.querySelectorAll('#drawToolbar .dtb-btn').forEach(b => b.classList.remove('on'));
+    // Highlight the clicked fragment button
+    document.querySelectorAll('#drawFragGrid .fg-btn').forEach(b => b.classList.toggle('on', b.dataset.fg === name));
+    document.querySelectorAll('#drawElemGrid .el-btn').forEach(b => b.classList.remove('on'));
   },
 
   clearAll() {
@@ -242,6 +297,9 @@ const DrawEngine = {
       }
       if(this.curTool==='atom'){
         this.pushUndo(); if(atom){atom.elem=this.curElem;atom.explicit=true;} else this.addAtom(pos.x,pos.y,this.curElem,true); this.render(); this.updateSmiles(); return;
+      }
+      if(this.curTool==='fragment' && this.curFragment){
+        this.placeFragment(this.curFragment,pos.x,pos.y);return;
       }
       if(['ring6','ring5','benzene'].includes(this.curTool)){
         this.pushUndo();this.placeRing(pos.x,pos.y,this.curTool);this.render();this.updateSmiles();return;
