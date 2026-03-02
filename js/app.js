@@ -90,13 +90,15 @@ function parseCSVLine(line) {
 // ═══════════════════════════════════════════
 const StructureSearch = {
   db: [],
-  ketcherLoaded: false,
+  jsmeApplet: null,
+  jsmeReady: false,
   // Backend API URL — auto-detect from current server. Falls back to JS RDKit if unreachable.
   API_URL: window.location.origin + '/api',
 
   init(data) {
     this.db = data || [];
     this._checkBackend();
+    this._initJSME();
   },
 
   // Check if Python backend is available
@@ -107,7 +109,6 @@ const StructureSearch = {
         const info = await resp.json();
         console.log(`[StructureSearch] Python backend online. ${info.entries} entries.`);
         this.backendAvailable = true;
-        // Show backend status badge
         const badge = document.getElementById('searchBackendBadge');
         if (badge) { badge.textContent = '🐍 Python RDKit'; badge.className = 'search-backend-badge online'; }
       }
@@ -119,39 +120,55 @@ const StructureSearch = {
     }
   },
 
-  // Load Ketcher in the search page iframe
-  loadKetcher() {
-    const frame = document.getElementById('searchKetcherFrame');
-    if (!frame) return;
-    if (!frame.src || frame.src === '' || frame.src === window.location.href) {
-      frame.src = 'https://unpkg.com/ketcher-standalone@2.26.0/dist/index.html';
-      this.ketcherLoaded = true;
+  // Initialize JSME molecular editor
+  _initJSME() {
+    // JSME global callback — called when JSME is fully loaded
+    window.jsmeOnLoad = () => {
+      console.log('[StructureSearch] JSME loaded, creating applet...');
+      const container = document.getElementById('jsmeContainer');
+      if (!container) return;
+      this.jsmeApplet = new JSApplet.JSME('jsmeContainer', '100%', '100%', {
+        options: 'query,hydrogens,nocanonize,atommovecheck'
+      });
+      this.jsmeReady = true;
+      // Auto-update SMILES when user modifies the structure
+      this.jsmeApplet.setCallBack('AfterStructureModified', (event) => {
+        const smiles = event.src.smiles();
+        if (smiles && smiles.trim()) {
+          document.getElementById('searchSmilesInput').value = smiles.trim();
+        }
+      });
+      console.log('[StructureSearch] JSME editor ready.');
+    };
+  },
+
+  // Get SMILES from JSME editor and copy to input
+  getFromEditor() {
+    if (!this.jsmeApplet || !this.jsmeReady) {
+      toast('Editor is still loading...', 'info');
+      return;
+    }
+    const smiles = this.jsmeApplet.smiles();
+    if (smiles && smiles.trim()) {
+      const input = document.getElementById('searchSmilesInput');
+      if (input) input.value = smiles.trim();
+      // Copy to clipboard
+      navigator.clipboard.writeText(smiles.trim()).then(() => {
+        toast(`SMILES copied: ${smiles.trim()}`, 'success');
+      }).catch(() => {
+        toast(`SMILES: ${smiles.trim()}`, 'success');
+      });
+    } else {
+      toast('No structure drawn. Please draw a molecule first.', 'info');
     }
   },
 
-  // Get SMILES from Ketcher editor
-  async getFromKetcher() {
-    const frame = document.getElementById('searchKetcherFrame');
-    if (!frame || !frame.contentWindow) {
-      toast('Ketcher editor is loading...', 'info');
-      return;
-    }
-    try {
-      const ketcher = frame.contentWindow.ketcher;
-      if (!ketcher) {
-        toast('Ketcher API not ready yet. Please wait a moment.', 'info');
-        return;
-      }
-      let smiles = '';
-      if (ketcher.getSmiles) smiles = await ketcher.getSmiles();
-      if (smiles && smiles.trim()) {
-        document.getElementById('searchSmilesInput').value = smiles.trim();
-        toast(`Got SMILES: ${smiles.trim()}`, 'success');
-      } else {
-        toast('No structure drawn. Please draw a molecule fragment first.', 'info');
-      }
-    } catch (e) {
-      toast('Could not get SMILES from editor. Type SMILES manually.', 'error');
+  // Clear the JSME editor
+  clearEditor() {
+    if (this.jsmeApplet && this.jsmeReady) {
+      this.jsmeApplet.reset();
+      document.getElementById('searchSmilesInput').value = '';
+      toast('Editor cleared', 'info');
     }
   },
 
