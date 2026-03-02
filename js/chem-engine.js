@@ -538,9 +538,9 @@ const ChemEngine = {
 
     const vbMatch = svgStr.match(/viewBox=['"]([\d.\s,eE+-]+)['"]/);
     const vb = vbMatch ? vbMatch[1].split(/[\s,]+/).map(Number) : [0, 0, 250, 200];
-    const r = vb[2] * 0.038;          // circle radius
-    const fontSize = vb[2] * 0.028;   // label font size
-    const labelR = vb[2] * 0.018;     // small badge radius
+    const r = vb[2] * 0.022;          // circle radius — similar to atom label size
+    const fontSize = vb[2] * 0.024;   // label font size
+    const labelR = vb[2] * 0.016;     // small badge radius
 
     const COLORS = {
       formed: { stroke: '#00a86b', fill: 'rgba(0,168,107,0.18)', text: '#00a86b' },
