@@ -454,7 +454,10 @@ const VisualizerApp = {
   },
 
   // ─── Select Reaction ───
-  selectReaction(doi) {
+  // Cache for MCS-based bond change results from backend
+  _bondChangeCache: {},
+
+  async selectReaction(doi) {
     this.currentDOI = doi;
     document.querySelectorAll('.viz-doi-item').forEach(el => el.classList.toggle('active', el.title === doi));
     const steps = this.grouped.get(doi) || [];
@@ -463,8 +466,69 @@ const VisualizerApp = {
     this._clearSelection();
     const ph = document.getElementById('vizPlaceholder');
     if (ph) ph.style.display = 'none';
+
+    // Pre-fetch MCS-based bond changes for steps that need auto-detection
+    await this._prefetchBondChanges(steps);
+
     this.layoutReaction(steps, doi);
     setTimeout(() => this.fitToView(), 120);
+  },
+
+  // Fetch exact bond changes from backend for steps missing CSV data
+  async _prefetchBondChanges(steps) {
+    const promises = [];
+    for (const step of steps) {
+      const sm = step['SMILES SM'];
+      const prod = step['SMILES Product'];
+      if (!sm || !prod) continue;
+
+      // Check if CSV has bond data — if so, we'll still want atom indices
+      const cacheKey = `${sm}|${prod}`;
+      if (this._bondChangeCache[cacheKey]) continue;
+
+      promises.push(
+        fetch('/api/bond_changes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sm, prod })
+        })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data && !data.error) {
+            this._bondChangeCache[cacheKey] = data;
+          }
+        })
+        .catch(() => {})
+      );
+    }
+    if (promises.length) await Promise.all(promises);
+  },
+
+  // Match a CSV bond descriptor (e.g., "C-N") to MCS results and add atom indices
+  _enrichBondWithMCS(item, mcsData) {
+    if (!mcsData) return;
+    const list = item.type === 'formed' ? mcsData.formed : mcsData.broken;
+    if (!list) return;
+
+    // Normalize descriptor for matching: sort elements, ignore bond order symbol
+    const normalize = (desc) => {
+      const m = desc.match(/^([A-Z][a-z]?)[=\-?#~]?([A-Z][a-z]?)$/);
+      if (!m) return desc.toLowerCase();
+      return [m[1], m[2]].sort().join('-').toLowerCase();
+    };
+
+    const target = normalize(item.desc);
+
+    // Find first unused match in the MCS results
+    for (const entry of list) {
+      if (entry._used) continue;
+      if (normalize(entry.desc) === target) {
+        item.smAtoms = entry.sm_atoms;
+        item.prodAtoms = entry.prod_atoms;
+        entry._used = true;
+        return;
+      }
+    }
   },
 
   clearCanvas() {
@@ -612,21 +676,56 @@ const VisualizerApp = {
       const smSmi = step['SMILES SM'];
       const prodSmi = step['SMILES Product'];
 
-      // Read bonds in alternating order from CSV columns
+      // ── Build bond items from CSV data + MCS atom indices ──
       let alternatingBonds = [];
+      const cacheKey = smSmi && prodSmi ? `${smSmi}|${prodSmi}` : null;
+      const mcsData = cacheKey ? this._bondChangeCache[cacheKey] : null;
+
+      // Read bonds from CSV columns first
       for (let i = 1; i <= 8; i++) {
         const f = step[`Formed ${i}`];
         const b = step[`Broken ${i}`];
-        if (f && f.trim()) alternatingBonds.push({ desc: f.trim(), color: '#00c48c', type: 'formed' });
-        if (b && b.trim()) alternatingBonds.push({ desc: b.trim(), color: '#ff6b6b', type: 'broken' });
+        if (f && f.trim()) {
+          const item = { desc: f.trim(), color: '#00c48c', type: 'formed' };
+          // Try to find matching MCS atom indices for this descriptor
+          if (mcsData) this._enrichBondWithMCS(item, mcsData);
+          alternatingBonds.push(item);
+        }
+        if (b && b.trim()) {
+          const item = { desc: b.trim(), color: '#ff6b6b', type: 'broken' };
+          if (mcsData) this._enrichBondWithMCS(item, mcsData);
+          alternatingBonds.push(item);
+        }
       }
 
-      // Auto-detect bond changes from SMILES comparison if no manual data
-      let autoDetected = null;
+      // Auto-detect from MCS backend if no CSV data
+      if (!alternatingBonds.length && mcsData) {
+        const maxLen = Math.max(
+          (mcsData.formed || []).length,
+          (mcsData.broken || []).length
+        );
+        for (let i = 0; i < maxLen; i++) {
+          if (i < (mcsData.formed || []).length) {
+            const f = mcsData.formed[i];
+            alternatingBonds.push({
+              desc: f.desc, color: '#00c48c', type: 'formed',
+              smAtoms: f.sm_atoms, prodAtoms: f.prod_atoms
+            });
+          }
+          if (i < (mcsData.broken || []).length) {
+            const b = mcsData.broken[i];
+            alternatingBonds.push({
+              desc: b.desc, color: '#ff6b6b', type: 'broken',
+              smAtoms: b.sm_atoms, prodAtoms: b.prod_atoms
+            });
+          }
+        }
+      }
+
+      // Fallback: client-side multiset detection
       if (!alternatingBonds.length && smSmi && prodSmi) {
-        autoDetected = ChemEngine.detectBondChanges(smSmi, prodSmi);
+        const autoDetected = ChemEngine.detectBondChanges(smSmi, prodSmi);
         if (autoDetected) {
-          // Interleave auto-detected: formed first, then broken alternating
           const maxLen = Math.max(autoDetected.formed.length, autoDetected.broken.length);
           for (let i = 0; i < maxLen; i++) {
             if (i < autoDetected.formed.length) alternatingBonds.push({ desc: autoDetected.formed[i], color: '#00c48c', type: 'formed' });
@@ -635,11 +734,13 @@ const VisualizerApp = {
         }
       }
 
-      // Store editable state - each bond has {desc, color, type, order, atomIdx}
+      // Store editable state - each bond has {desc, color, type, order, atomIdx, smAtoms, prodAtoms}
       const stepKey = `${doi}_step${idx}`;
       if (!this._stepBondData[stepKey]) {
         this._stepBondData[stepKey] = {
-          bondItems: alternatingBonds.map((item, i) => ({ ...item, order: i + 1, atomIdx: null }))
+          bondItems: alternatingBonds.map((item, i) => ({
+            ...item, order: i + 1, atomIdx: null
+          }))
         };
       }
       const bondState = this._stepBondData[stepKey];

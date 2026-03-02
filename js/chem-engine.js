@@ -218,7 +218,12 @@ const ChemEngine = {
       if (bondItems && bondItems.length) {
         for (const item of bondItems) {
           const cleanDesc = item.desc ? item.desc.replace(/\(\d+\)/g, '') : item.desc;
-          allBondDescs.push({ desc: cleanDesc, color: hexToRgb(item.color), order: item.order, type: item.type, rawColor: item.color });
+          allBondDescs.push({
+            desc: cleanDesc, color: hexToRgb(item.color), order: item.order,
+            type: item.type, rawColor: item.color,
+            smAtoms: item.smAtoms || null,     // exact atom indices from MCS
+            prodAtoms: item.prodAtoms || null   // exact atom indices from MCS
+          });
         }
       } else {
         for (const d of (formedBonds || [])) allBondDescs.push({ desc: d, color: GREEN, type: 'formed' });
@@ -255,6 +260,40 @@ const ChemEngine = {
       for (let di = 0; di < allBondDescs.length; di++) {
         const item = allBondDescs[di];
         if (!item.desc) continue;
+
+        // ─── Fast path: use exact MCS atom indices if available ───
+        const mcsAtoms = (role === 'sm') ? item.smAtoms : (role === 'product') ? item.prodAtoms : null;
+        if (mcsAtoms && mcsAtoms.length && mcsAtoms.every(a => a !== null && a !== undefined && a < atoms.length)) {
+          // Highlight the specific atoms from MCS mapping
+          for (const aidx of mcsAtoms) {
+            if (!highlightAtoms.includes(aidx)) {
+              highlightAtoms.push(aidx);
+              highlightAtomColors[aidx] = item.color;
+            }
+            if (item.order) {
+              if (!atomBondOrderMap[aidx]) atomBondOrderMap[aidx] = [];
+              atomBondOrderMap[aidx].push({ order: item.order, rawColor: item.rawColor, type: item.type });
+            }
+          }
+          // Also try to highlight the bond between these atoms if it exists
+          if (mcsAtoms.length === 2) {
+            for (let bi = 0; bi < bonds.length; bi++) {
+              const bond = bonds[bi];
+              const ba1 = bond.atoms[0], ba2 = bond.atoms[1];
+              if ((ba1 === mcsAtoms[0] && ba2 === mcsAtoms[1]) ||
+                  (ba1 === mcsAtoms[1] && ba2 === mcsAtoms[0])) {
+                if (!highlightBonds.includes(bi)) {
+                  highlightBonds.push(bi);
+                  highlightBondColors[bi] = item.color;
+                }
+                break;
+              }
+            }
+          }
+          matchedDescs.add(di);
+          continue;  // skip pattern matching
+        }
+
         const parsed = this._parseBondDescriptor(item.desc);
         if (!parsed) continue;
         const involvesH = parsed.elem1 === 'H' || parsed.elem2 === 'H';

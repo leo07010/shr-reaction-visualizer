@@ -7,7 +7,7 @@ Also serves the static frontend files (HTML, JS, CSS)
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from rdkit import Chem
-from rdkit.Chem import Draw, AllChem
+from rdkit.Chem import Draw, AllChem, rdFMCS
 from rdkit.Chem.Draw import rdMolDraw2D
 import json
 import os
@@ -158,6 +158,241 @@ def mol_svg():
     if svg is None:
         return jsonify({'error': 'Could not render molecule'}), 400
     return jsonify({'svg': svg})
+
+
+# ─── Bond change detection via MCS atom-atom mapping ────────────────────────
+
+ORDER_SYM = {1.0: '-', 2.0: '=', 3.0: '#', 1.5: '~'}
+
+def compute_bond_changes(sm_smiles, prod_smiles):
+    """
+    Compute exact bond changes between SM and Product using fragment-based
+    MCS atom-atom mapping. Returns formed/broken bonds with specific atom indices.
+    """
+    sm_mol = Chem.MolFromSmiles(sm_smiles)
+    prod_mol = Chem.MolFromSmiles(prod_smiles)
+    if not sm_mol or not prod_mol:
+        return None
+
+    # Split into fragments for better MCS matching
+    sm_frags = Chem.GetMolFrags(sm_mol, asMols=True, sanitizeFrags=True)
+    prod_frags = Chem.GetMolFrags(prod_mol, asMols=True, sanitizeFrags=True)
+    sm_frag_idx = Chem.GetMolFrags(sm_mol)
+    prod_frag_idx = Chem.GetMolFrags(prod_mol)
+
+    # ── Pass 1: Match SM fragments to Product fragments via MCS ──
+    atom_map = {}       # sm_global_idx -> prod_global_idx
+    used_prod_atoms = set()
+
+    for si, sf in enumerate(sm_frags):
+        best_mcs = 0
+        best_pi = -1
+        best_sm_match = None
+        best_prod_match = None
+
+        for pi, pf in enumerate(prod_frags):
+            try:
+                mcs = rdFMCS.FindMCS([sf, pf],
+                    bondCompare=rdFMCS.BondCompare.CompareAny,
+                    atomCompare=rdFMCS.AtomCompare.CompareElements,
+                    matchValences=False,
+                    timeout=5)
+            except Exception:
+                continue
+
+            if mcs.numAtoms > best_mcs and mcs.smartsString:
+                mcs_mol = Chem.MolFromSmarts(mcs.smartsString)
+                if not mcs_mol:
+                    continue
+                sm_m = sf.GetSubstructMatch(mcs_mol)
+                prod_m = pf.GetSubstructMatch(mcs_mol)
+                if sm_m and prod_m:
+                    # Check no conflict with already-used prod atoms
+                    prod_globals = [prod_frag_idx[pi][j] for j in prod_m]
+                    if not any(a in used_prod_atoms for a in prod_globals):
+                        best_mcs = mcs.numAtoms
+                        best_pi = pi
+                        best_sm_match = sm_m
+                        best_prod_match = prod_m
+
+        if best_pi >= 0:
+            for i in range(min(len(best_sm_match), len(best_prod_match))):
+                sg = sm_frag_idx[si][best_sm_match[i]]
+                pg = prod_frag_idx[best_pi][best_prod_match[i]]
+                atom_map[sg] = pg
+                used_prod_atoms.add(pg)
+
+    # ── Pass 2: Try to map remaining unmapped atoms ──
+    unmapped_sm = [i for i in range(sm_mol.GetNumAtoms()) if i not in atom_map]
+    unmapped_prod = [i for i in range(prod_mol.GetNumAtoms()) if i not in used_prod_atoms]
+
+    if unmapped_sm and unmapped_prod:
+        # Build sub-molecules from unmapped atoms and try MCS
+        # Simple approach: match by element + neighbor signature
+        sm_elem_pool = {}
+        for idx in unmapped_sm:
+            elem = sm_mol.GetAtomWithIdx(idx).GetSymbol()
+            sm_elem_pool.setdefault(elem, []).append(idx)
+
+        for pidx in unmapped_prod:
+            elem = prod_mol.GetAtomWithIdx(pidx).GetSymbol()
+            if elem in sm_elem_pool and sm_elem_pool[elem]:
+                sidx = sm_elem_pool[elem].pop(0)
+                atom_map[sidx] = pidx
+                used_prod_atoms.add(pidx)
+
+    prod_to_sm = {v: k for k, v in atom_map.items()}
+
+    # ── Detect bond changes ──
+    formed = []
+    broken = []
+
+    # Build SM bonds mapped to Product atom space
+    sm_bonds_mapped = {}
+    for bond in sm_mol.GetBonds():
+        a1, a2 = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        order = bond.GetBondTypeAsDouble()
+        if a1 in atom_map and a2 in atom_map:
+            pa1, pa2 = atom_map[a1], atom_map[a2]
+            key = (min(pa1, pa2), max(pa1, pa2))
+            sm_bonds_mapped[key] = (a1, a2, order)
+
+    # Build Product bonds
+    prod_bond_set = {}
+    for bond in prod_mol.GetBonds():
+        a1, a2 = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        order = bond.GetBondTypeAsDouble()
+        key = (min(a1, a2), max(a1, a2))
+        prod_bond_set[key] = (a1, a2, order)
+
+    def bond_desc(mol, a1, a2, order):
+        e1 = mol.GetAtomWithIdx(a1).GetSymbol()
+        e2 = mol.GetAtomWithIdx(a2).GetSymbol()
+        pair = sorted([e1, e2])
+        sym = ORDER_SYM.get(order, '-')
+        return f'{pair[0]}{sym}{pair[1]}'
+
+    # Bonds in Product but not in mapped SM → FORMED
+    for key, (pa1, pa2, p_order) in prod_bond_set.items():
+        if key in sm_bonds_mapped:
+            sa1, sa2, s_order = sm_bonds_mapped[key]
+            if s_order != p_order:
+                # Bond order changed → old order broken, new order formed
+                broken.append({
+                    'desc': bond_desc(sm_mol, sa1, sa2, s_order),
+                    'sm_atoms': [sa1, sa2],
+                    'prod_atoms': [pa1, pa2],
+                    'bond_order': s_order
+                })
+                formed.append({
+                    'desc': bond_desc(prod_mol, pa1, pa2, p_order),
+                    'sm_atoms': [sa1, sa2],
+                    'prod_atoms': [pa1, pa2],
+                    'bond_order': p_order
+                })
+        else:
+            # New bond in Product
+            sm_a1 = prod_to_sm.get(pa1)
+            sm_a2 = prod_to_sm.get(pa2)
+            formed.append({
+                'desc': bond_desc(prod_mol, pa1, pa2, p_order),
+                'sm_atoms': [sm_a1, sm_a2],
+                'prod_atoms': [pa1, pa2],
+                'bond_order': p_order
+            })
+
+    # Bonds in mapped SM but not in Product → BROKEN
+    for key, (sa1, sa2, s_order) in sm_bonds_mapped.items():
+        if key not in prod_bond_set:
+            broken.append({
+                'desc': bond_desc(sm_mol, sa1, sa2, s_order),
+                'sm_atoms': [sa1, sa2],
+                'prod_atoms': [atom_map.get(sa1), atom_map.get(sa2)],
+                'bond_order': s_order
+            })
+
+    # Bonds involving unmapped SM atoms (one end mapped, other not) → BROKEN
+    for bond in sm_mol.GetBonds():
+        a1, a2 = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        order = bond.GetBondTypeAsDouble()
+        mapped1, mapped2 = a1 in atom_map, a2 in atom_map
+        if mapped1 != mapped2:  # exactly one atom is mapped
+            broken.append({
+                'desc': bond_desc(sm_mol, a1, a2, order),
+                'sm_atoms': [a1, a2],
+                'prod_atoms': [atom_map.get(a1), atom_map.get(a2)],
+                'bond_order': order
+            })
+
+    # Bonds involving unmapped Product atoms (one end mapped, other not) → FORMED
+    for bond in prod_mol.GetBonds():
+        a1, a2 = bond.GetBeginAtomIdx(), bond.GetEndAtomIdx()
+        order = bond.GetBondTypeAsDouble()
+        mapped1, mapped2 = a1 in prod_to_sm, a2 in prod_to_sm
+        if mapped1 != mapped2:
+            formed.append({
+                'desc': bond_desc(prod_mol, a1, a2, order),
+                'sm_atoms': [prod_to_sm.get(a1), prod_to_sm.get(a2)],
+                'prod_atoms': [a1, a2],
+                'bond_order': order
+            })
+
+    # ── H bond changes (implicit H count differences) ──
+    for sm_idx, prod_idx in atom_map.items():
+        try:
+            sm_h = sm_mol.GetAtomWithIdx(sm_idx).GetTotalNumHs()
+            prod_h = prod_mol.GetAtomWithIdx(prod_idx).GetTotalNumHs()
+            diff = prod_h - sm_h
+            elem = sm_mol.GetAtomWithIdx(sm_idx).GetSymbol()
+            if diff > 0:
+                for _ in range(diff):
+                    desc = f'H-{elem}' if 'H' < elem else f'{elem}-H'
+                    formed.append({
+                        'desc': desc,
+                        'sm_atoms': [sm_idx],
+                        'prod_atoms': [prod_idx],
+                        'bond_order': 1.0
+                    })
+            elif diff < 0:
+                for _ in range(-diff):
+                    desc = f'H-{elem}' if 'H' < elem else f'{elem}-H'
+                    broken.append({
+                        'desc': desc,
+                        'sm_atoms': [sm_idx],
+                        'prod_atoms': [prod_idx],
+                        'bond_order': 1.0
+                    })
+        except Exception:
+            continue
+
+    return {
+        'formed': formed,
+        'broken': broken,
+        'atom_map': {str(k): v for k, v in atom_map.items()}
+    }
+
+
+@app.route('/api/bond_changes', methods=['POST'])
+def bond_changes():
+    """
+    Compute exact bond changes between SM and Product using MCS atom-atom mapping.
+    Request: { "sm": "SMILES", "prod": "SMILES" }
+    Returns: { formed: [...], broken: [...], atom_map: {...} }
+    """
+    body = request.get_json()
+    if not body or 'sm' not in body or 'prod' not in body:
+        return jsonify({'error': 'Missing sm or prod parameter'}), 400
+
+    sm = body['sm'].strip()
+    prod = body['prod'].strip()
+
+    try:
+        result = compute_bond_changes(sm, prod)
+        if result is None:
+            return jsonify({'error': 'Could not compute bond changes'}), 400
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/data', methods=['GET'])
