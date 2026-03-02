@@ -208,9 +208,20 @@ const StructureSearch = {
     // ── JS RDKit fallback ───────────────────────────────────────────────────
     if (!ChemEngine.ready) { toast('RDKit is not ready yet', 'error'); return; }
 
+    // Try SMILES first (stricter matching), then SMARTS fallback
     let qmol = null;
-    try { qmol = ChemEngine.rdkit.get_qmol(query); if (!qmol?.is_valid()) { if (qmol) qmol.delete(); qmol = null; } } catch (e) {}
-    if (!qmol) { try { qmol = ChemEngine.rdkit.get_qmol(query); } catch (e) {} }
+    try {
+      const mol = ChemEngine.rdkit.get_mol(query);
+      if (mol?.is_valid()) {
+        // Convert SMILES mol to query mol for substructure search
+        const qsmarts = mol.get_smarts();
+        mol.delete();
+        if (qsmarts) { try { qmol = ChemEngine.rdkit.get_qmol(qsmarts); } catch(e) {} }
+        if (!qmol?.is_valid()) { if (qmol) qmol.delete(); qmol = null; }
+      } else { if (mol) mol.delete(); }
+    } catch (e) {}
+    // SMARTS fallback
+    if (!qmol) { try { qmol = ChemEngine.rdkit.get_qmol(query); if (!qmol?.is_valid()) { if (qmol) qmol.delete(); qmol = null; } } catch (e) {} }
     if (!qmol) { toast('Invalid SMILES/SMARTS query', 'error'); return; }
 
     const matches = [];

@@ -87,16 +87,16 @@ def search():
     query_smiles = body['smiles'].strip()
     limit = int(body.get('limit', 100))
 
-    # Parse query as SMARTS first, then SMILES
+    # Parse query as SMILES first (stricter valence matching), then SMARTS
     query_mol = None
     try:
-        query_mol = Chem.MolFromSmarts(query_smiles)
+        query_mol = Chem.MolFromSmiles(query_smiles)
     except Exception:
         pass
 
     if query_mol is None:
         try:
-            query_mol = Chem.MolFromSmiles(query_smiles)
+            query_mol = Chem.MolFromSmarts(query_smiles)
         except Exception:
             pass
 
