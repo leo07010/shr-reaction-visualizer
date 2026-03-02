@@ -485,12 +485,12 @@ const VisualizerApp = {
   layoutReaction(steps, doi) {
     if (!steps.length) return;
 
-    const MOL_W = 160;
-    const MOL_H = 160;
+    const MOL_W = 260;
+    const MOL_H = 260;
     const MARGIN = 50;
     const COLS_PER_ROW = 3;
-    const STEP_BLOCK_W = 500;   // wider than before (was 420)
-    const STEP_ROW_H = 330;     // taller to fit bond edit controls
+    const STEP_BLOCK_W = 600;
+    const STEP_ROW_H = 450;
 
     // ── Title ──
     const isDOI = doi.startsWith('10.');
@@ -530,9 +530,9 @@ const VisualizerApp = {
         <div class="cv-arrow-label">${(allReagents || 'Conditions').substring(0, 60)}</div>
       </div>`
     });
-    cx += 200;
+    cx += 240;
 
-    this.addElement({ type: 'molecule', x: cx, y: oy - 15, smiles: prodSmiles, width: MOL_W + 30, height: MOL_H + 30, label: 'Product' });
+    this.addElement({ type: 'molecule', x: cx, y: oy - 15, smiles: prodSmiles, width: MOL_W + 40, height: MOL_H + 40, label: 'Product' });
 
     // ── Step-by-Step with Checkbox Selection ──
     const startY = oy + MOL_H + 80;
@@ -649,7 +649,7 @@ const VisualizerApp = {
       // SM molecule — highlight with custom colors
       this.addElement({
         type: 'molecule', x: sx, y: sy + 36,
-        smiles: smSmi, width: 140, height: 140,
+        smiles: smSmi, width: MOL_W, height: MOL_H,
         bondItems: bondState.bondItems, molRole: 'sm',
         stepKey
       });
@@ -691,7 +691,7 @@ const VisualizerApp = {
       bondHTML += '</div>';
 
       this.addElement({
-        type: 'label', x: sx + 155, y: sy + 40,
+        type: 'label', x: sx + MOL_W + 15, y: sy + 40,
         html: `<div class="cv-bond-changes" id="${bondPanelId}">${bondHTML}</div>`
       });
 
@@ -746,8 +746,8 @@ const VisualizerApp = {
 
       // Product molecule — highlight with custom colors
       this.addElement({
-        type: 'molecule', x: sx + 310, y: sy + 36,
-        smiles: prodSmi, width: 140, height: 140,
+        type: 'molecule', x: sx + STEP_BLOCK_W - MOL_W - 20, y: sy + 36,
+        smiles: prodSmi, width: MOL_W, height: MOL_H,
         bondItems: bondState.bondItems, molRole: 'product',
         stepKey
       });
@@ -755,7 +755,7 @@ const VisualizerApp = {
       // Reagents label
       if (step['Reagents']) {
         this.addElement({
-          type: 'label', x: sx + 155, y: sy + 210,
+          type: 'label', x: sx + MOL_W + 20, y: sy + MOL_H + 50,
           html: `<div class="cv-reagent">${step['Reagents']}</div>`
         });
       }
@@ -796,18 +796,19 @@ const VisualizerApp = {
       el.classList.add('cv-mol');
       const box = document.createElement('div');
       box.className = 'cv-mol-box';
-      box.style.width = (width || 140) + 'px';
-      box.style.height = (height || 140) + 'px';
+      const molW = width || 260;
+      const molH = height || 260;
+      box.style.width = molW + 'px';
+      box.style.height = molH + 'px';
 
       if (smiles) {
         let svg;
         if (bondItems && bondItems.length) {
-          // New: custom per-bond colors
-          svg = ChemEngine.getSvgHighlighted(smiles, width || 140, height || 140, null, null, molRole || 'both', bondItems);
+          svg = ChemEngine.getSvgHighlighted(smiles, molW, molH, null, null, molRole || 'both', bondItems);
         } else if ((formedBonds && formedBonds.length) || (brokenBonds && brokenBonds.length)) {
-          svg = ChemEngine.getSvgHighlighted(smiles, width || 140, height || 140, formedBonds, brokenBonds, molRole || 'both');
+          svg = ChemEngine.getSvgHighlighted(smiles, molW, molH, formedBonds, brokenBonds, molRole || 'both');
         } else {
-          svg = ChemEngine.getSvg(smiles, width || 140, height || 140);
+          svg = ChemEngine.getSvg(smiles, molW, molH);
         }
         if (svg) {
           box.innerHTML = svg;

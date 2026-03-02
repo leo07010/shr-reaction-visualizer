@@ -116,17 +116,26 @@ const ChemEngine = {
   // ═══════════════════════════════════════════
   getSvg(smiles, w, h) {
     if (!smiles) return null;
+    const sw = w || 250;
+    const sh = h || 200;
 
     if (this.ready) {
       const mol = this._tryGetMol(smiles);
       if (mol) {
         try {
+          // Scale font/line for larger renders
+          const scale = Math.min(sw, sh) / 200;
+          const fontSize = Math.max(12, Math.round(14 * scale));
+          const lineWidth = Math.max(1.5, 1.8 * scale);
           const details = JSON.stringify({
+            width: sw,
+            height: sh,
             clearBackground: false,
             addStereoAnnotation: true,
-            atomLabelFontSize: 16,
-            bondLineWidth: 2,
-            multipleBondOffset: 0.2
+            atomLabelFontSize: fontSize,
+            bondLineWidth: lineWidth,
+            multipleBondOffset: 0.2,
+            padding: 0.12
           });
           return mol.get_svg_with_highlights(details);
         } catch(e) {}
@@ -134,7 +143,7 @@ const ChemEngine = {
       }
     }
 
-    return this._generateFallbackSvg(smiles, w || 150, h || 150);
+    return this._generateFallbackSvg(smiles, sw, sh);
   },
 
   // ═══════════════════════════════════════════
@@ -146,18 +155,26 @@ const ChemEngine = {
   // Falls back to formedBonds/brokenBonds arrays for backward compatibility
   getSvgHighlighted(smiles, w, h, formedBonds, brokenBonds, role, bondItems) {
     if (!smiles) return null;
-    if (!this.ready) return this.getSvg(smiles, w, h);
+    const sw = w || 250;
+    const sh = h || 200;
+    if (!this.ready) return this.getSvg(smiles, sw, sh);
 
     const mol = this._tryGetMol(smiles);
-    if (!mol) return this._generateFallbackSvg(smiles, w || 150, h || 150);
+    if (!mol) return this._generateFallbackSvg(smiles, sw, sh);
+
+    // Scale font/line for larger renders
+    const scale = Math.min(sw, sh) / 200;
+    const fontSize = Math.max(12, Math.round(14 * scale));
+    const lineWidth = Math.max(1.5, 1.8 * scale);
 
     try {
       let molJSON;
       try { molJSON = mol.get_json(); } catch(e) { molJSON = null; }
       if (!molJSON) {
         const details = JSON.stringify({
+          width: sw, height: sh,
           clearBackground: false, addStereoAnnotation: true,
-          atomLabelFontSize: 16, bondLineWidth: 2, multipleBondOffset: 0.2
+          atomLabelFontSize: fontSize, bondLineWidth: lineWidth, multipleBondOffset: 0.2, padding: 0.12
         });
         return mol.get_svg_with_highlights(details);
       }
@@ -305,11 +322,14 @@ const ChemEngine = {
 
       // Build highlight details
       const details = {
+        width: sw,
+        height: sh,
         clearBackground: false,
         addStereoAnnotation: true,
-        atomLabelFontSize: 16,
-        bondLineWidth: 2,
-        multipleBondOffset: 0.2
+        atomLabelFontSize: fontSize,
+        bondLineWidth: lineWidth,
+        multipleBondOffset: 0.2,
+        padding: 0.12
       };
 
       if (highlightBonds.length > 0 || highlightAtoms.length > 0) {
@@ -348,8 +368,9 @@ const ChemEngine = {
       // Fallback to plain SVG
       try {
         const details = JSON.stringify({
+          width: sw, height: sh,
           clearBackground: false, addStereoAnnotation: true,
-          atomLabelFontSize: 16, bondLineWidth: 2, multipleBondOffset: 0.2
+          atomLabelFontSize: fontSize, bondLineWidth: lineWidth, multipleBondOffset: 0.2, padding: 0.12
         });
         return mol.get_svg_with_highlights(details);
       } catch(e2) { return null; }
