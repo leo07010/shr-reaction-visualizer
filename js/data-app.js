@@ -18,17 +18,18 @@ const DataApp = {
     const sub=document.getElementById('searchSubstruct').value.trim();
     const by=document.getElementById('fltContributor').value;
     const bnd=document.getElementById('fltBond').value;
+    const bndRole=(document.getElementById('fltBondRole')||{}).value||'';
     this.filtered=this.db.filter(e=>{
       if(txt){const f=`${e['Paper DOI']||''} ${e['Entered By']||''} ${e['Reagents']||''} ${e['SMILES SM']||''} ${e['SMILES Product']||''}`.toLowerCase();if(!f.includes(txt))return false;}
       if(by&&e['Entered By']!==by)return false;
-      if(bnd){let has=false;for(let i=1;i<=8;i++){if(e[`Formed ${i}`]===bnd||e[`Broken ${i}`]===bnd){has=true;break;}}if(!has)return false;}
+      if(bnd){let has=false;for(let i=1;i<=8;i++){const checkF=!bndRole||bndRole==='formed';const checkB=!bndRole||bndRole==='broken';if(checkF&&e[`Formed ${i}`]===bnd){has=true;break;}if(checkB&&e[`Broken ${i}`]===bnd){has=true;break;}}if(!has)return false;}
       if(sub&&ChemEngine.ready){if(!ChemEngine.substructureMatch(e['SMILES SM'],sub)&&!ChemEngine.substructureMatch(e['SMILES Product'],sub))return false;}
       return true;
     });
     this.currentPage=1;this.renderTable();this.updateStats();
   },
   clearFilters(){
-    ['searchInput','searchSubstruct','fltContributor','fltBond'].forEach(id=>document.getElementById(id).value='');
+    ['searchInput','searchSubstruct','fltContributor','fltBond','fltBondRole'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
     this.applyFilters();
   },
   sort(col){

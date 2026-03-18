@@ -63,6 +63,9 @@
 <input type="text" class="fr-input" id="vizSearch" placeholder="Search DOI..." oninput="VisualizerApp.filterDOIs()">
 <div class="viz-doi-list" id="doiList"></div>
 <div class="side-sep"></div>
+<div class="side-sep"></div>
+<h4>Annotator</h4>
+<input type="text" class="fr-input" id="vizAnnotator" placeholder="Your name..." oninput="VisualizerApp.setAnnotator(this.value)" style="font-size:12px">
 <h4>Upload Data</h4>
 <input type="file" id="csvUploadViz" accept=".csv,.xlsx,.xls" style="display:none" onchange="VisualizerApp.handleCSV(event)">
 <button class="rp-btn" onclick="document.getElementById('csvUploadViz').click()" style="margin-top:6px">📁 Load CSV / Excel</button>
@@ -109,6 +112,15 @@ Circle
 <span class="viz-zoom-label" id="zoomLabel">100%</span>
 <button class="viz-tb-btn" onclick="VisualizerApp.zoomOut()" title="Zoom Out">−</button>
 <button class="viz-tb-btn" onclick="VisualizerApp.resetView()" title="Reset View">Reset</button>
+</div>
+<div class="viz-tb-sep"></div>
+<div class="viz-toolbar-group">
+<span style="font-size:11px;color:#888;margin-right:4px">Display:</span>
+<select class="viz-display-mode" id="vizDisplayMode" onchange="VisualizerApp.setDisplayMode(this.value)" title="Atom label display mode">
+<option value="bar">Color Bar + Label</option>
+<option value="color-only">Bond Color Only</option>
+<option value="superscript">Superscript Numbers</option>
+</select>
 </div>
 <div class="viz-tb-sep"></div>
 <div class="viz-toolbar-group">
@@ -159,6 +171,11 @@ Drag to move · Edge to resize · Click two atoms to mark bond · Drag blank are
 <div class="rp-section" style="gap:8px;">
 <select class="fr-input" id="fltContributor" onchange="DataApp.applyFilters()"><option value="">All Contributors</option></select>
 <select class="fr-input" id="fltBond" onchange="DataApp.applyFilters()"><option value="">All Bond Types</option></select>
+<select class="fr-input" id="fltBondRole" onchange="DataApp.applyFilters()">
+<option value="">Formed & Broken</option>
+<option value="formed">Formed Only</option>
+<option value="broken">Broken Only</option>
+</select>
 <button class="rp-btn" onclick="DataApp.clearFilters()" style="padding:6px;font-size:12px;">Clear Filters</button>
 </div>
 </div>
@@ -193,7 +210,7 @@ Drag to move · Edge to resize · Click two atoms to mark bond · Drag blank are
 <div class="search-draw-panel">
 <h4>Draw Fragment / Substructure</h4>
 <div class="search-input-row">
-<input type="text" class="fr-input" id="searchSmilesInput" placeholder="Or type SMILES / SMARTS directly...">
+<input type="text" class="fr-input" id="searchSmilesInput" placeholder="Type SMILES and press Enter to draw, or search...">
 <button class="btn-p" onclick="StructureSearch.runSearch()">🔍 Search</button>
 <button class="btn-s" onclick="StructureSearch.clearResults();DrawEngine.clearAll()" style="padding:10px 18px;font-size:13px">✕ Clear</button>
 <span id="searchBackendBadge" class="search-backend-badge offline">⚡ JS RDKit (local)</span>
@@ -241,6 +258,20 @@ Drag to move · Edge to resize · Click two atoms to mark bond · Drag blank are
 <button class="el-btn" data-e="Cl" style="color:#00aa00;border-color:#00aa00">Cl</button>
 <button class="el-btn" data-e="Br" style="color:#a52a2a;border-color:#a52a2a">Br</button>
 <button class="el-btn" data-e="I" style="color:#940094;border-color:#940094">I</button>
+<button class="el-btn" data-e="B" style="color:#ffb5b5;border-color:#ffb5b5">B</button>
+<button class="el-btn" data-e="Si" style="color:#f0c8a0;border-color:#c8a080">Si</button>
+<button class="el-btn" data-e="Li" style="color:#cc80ff;border-color:#cc80ff">Li</button>
+<button class="el-btn" data-e="Na" style="color:#ab5cf2;border-color:#ab5cf2">Na</button>
+<button class="el-btn" data-e="K" style="color:#8f40d4;border-color:#8f40d4">K</button>
+<button class="el-btn" data-e="Mg" style="color:#8aff00;border-color:#6cc000">Mg</button>
+<button class="el-btn" data-e="Fe" style="color:#e06633;border-color:#e06633">Fe</button>
+<button class="el-btn" data-e="Cu" style="color:#c88033;border-color:#c88033">Cu</button>
+<button class="el-btn" data-e="Zn" style="color:#7d80b0;border-color:#7d80b0">Zn</button>
+<button class="el-btn" data-e="Pd" style="color:#006985;border-color:#006985">Pd</button>
+<button class="el-btn" data-e="Pt" style="color:#888;border-color:#888">Pt</button>
+<button class="el-btn" data-e="Ni" style="color:#50d050;border-color:#50d050">Ni</button>
+<button class="el-btn" data-e="Ru" style="color:#248f8f;border-color:#248f8f">Ru</button>
+<button class="el-btn" data-e="Au" style="color:#ffd123;border-color:#c8a000">Au</button>
 </div>
 </div>
 <div class="draw-frag-section">

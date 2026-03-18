@@ -11,7 +11,12 @@ const DrawEngine = {
   hoverAtom: null, hoverBond: null,
   mousePos: {x:0,y:0},
   SNAP_R: 22, BOND_LEN: 50, ANGLE_SNAP: Math.PI/6,
-  ECOLORS: {C:'#333',H:'#888',N:'#3465a4',O:'#cc0000',S:'#c4a000',P:'#ff8000',F:'#00cc00',Cl:'#00aa00',Br:'#a52a2a',I:'#940094'},
+  ECOLORS: {C:'#333',H:'#888',N:'#3465a4',O:'#cc0000',S:'#c4a000',P:'#ff8000',F:'#00cc00',Cl:'#00aa00',Br:'#a52a2a',I:'#940094',
+    Li:'#cc80ff',Na:'#ab5cf2',K:'#8f40d4',Mg:'#8aff00',Ca:'#3dff00',
+    Fe:'#e06633',Co:'#f090a0',Ni:'#50d050',Cu:'#c88033',Zn:'#7d80b0',
+    Pd:'#006985',Pt:'#d0d0e0',Ru:'#248f8f',Rh:'#0a7d8c',Ir:'#175487',
+    Au:'#ffd123',Ag:'#c0c0c0',Al:'#bfa6a6',Mn:'#9c7ac7',Cr:'#8a99c7',
+    Sn:'#668080',B:'#ffb5b5',Se:'#ffa100',Si:'#f0c8a0'},
 
   // ── Tool display names for status indicator ──
   TOOL_NAMES: {
@@ -338,6 +343,71 @@ const DrawEngine = {
     } catch(e) { return null; }
   },
 
+  // ── SMILES → Canvas (via RDKit molblock 2D coords) ──
+  loadFromSmiles(smiles) {
+    if (!ChemEngine.ready || !smiles || !smiles.trim()) return false;
+    try {
+      const mol = ChemEngine._tryGetMol(smiles.trim());
+      if (!mol) return false;
+      const mb = mol.get_molblock();
+      mol.delete();
+      if (!mb) return false;
+
+      const lines = mb.split('\n');
+      const counts = lines[3];
+      const nA = parseInt(counts.substring(0, 3).trim());
+      const nB = parseInt(counts.substring(3, 6).trim());
+      if (!nA) return false;
+
+      // Parse atom coordinates + elements from molblock
+      const newAtoms = [];
+      const BOND_LEN = this.BOND_LEN || 50;
+      const scale = BOND_LEN; // 1 Angstrom ≈ BOND_LEN px
+      for (let i = 0; i < nA; i++) {
+        const al = lines[4 + i];
+        if (!al) continue;
+        const x = parseFloat(al.substring(0, 10).trim()) * scale;
+        const y = -parseFloat(al.substring(10, 20).trim()) * scale; // flip Y
+        const elem = al.substring(31, 34).trim() || 'C';
+        newAtoms.push({ id: this.nextId++, x, y, elem, explicit: elem !== 'C' });
+      }
+
+      // Parse bonds
+      const newBonds = [];
+      const typeMap = { 1: 'single', 2: 'double', 3: 'triple' };
+      for (let i = 0; i < nB; i++) {
+        const bl = lines[4 + nA + i];
+        if (!bl) continue;
+        const a1 = parseInt(bl.substring(0, 3).trim()) - 1;
+        const a2 = parseInt(bl.substring(3, 6).trim()) - 1;
+        const bt = parseInt(bl.substring(6, 9).trim()) || 1;
+        if (a1 < nA && a2 < nA) {
+          newBonds.push({ a: newAtoms[a1].id, b: newAtoms[a2].id, type: typeMap[bt] || 'single' });
+        }
+      }
+
+      // Center on canvas
+      if (newAtoms.length) {
+        const cx = this.canvas.width / 2;
+        const cy = this.canvas.height / 2;
+        let mx = 0, my = 0;
+        for (const a of newAtoms) { mx += a.x; my += a.y; }
+        mx /= newAtoms.length; my /= newAtoms.length;
+        for (const a of newAtoms) { a.x += cx - mx; a.y += cy - my; }
+      }
+
+      this.pushUndo();
+      this.atoms = newAtoms;
+      this.bonds = newBonds;
+      this.render();
+      this.updateSmiles();
+      return true;
+    } catch (e) {
+      console.warn('loadFromSmiles failed:', e);
+      return false;
+    }
+  },
+
   updateSmiles() {
     const smiles = this.toSmiles();
     const input = document.getElementById('searchSmilesInput');
@@ -475,6 +545,24 @@ const DrawEngine = {
         this._closeAtomPopup();
       }
     });
+
+    // ── SMILES text input → load into drawing canvas ──
+    const smiInput = document.getElementById('searchSmilesInput');
+    if (smiInput) {
+      let _smiLoading = false;
+      smiInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !_smiLoading) {
+          e.preventDefault();
+          _smiLoading = true;
+          const val = smiInput.value.trim();
+          if (val && this.loadFromSmiles(val)) {
+            const liveEl = document.getElementById('drawLiveSmiles');
+            if (liveEl) { liveEl.textContent = val; liveEl.style.color = 'var(--accent)'; }
+          }
+          _smiLoading = false;
+        }
+      });
+    }
   },
 
   // ── Inline atom element popup (double-click to change element) ──
@@ -487,7 +575,9 @@ const DrawEngine = {
     popup.className = 'draw-atom-popup';
     popup.style.left = (rect.left + atom.x + 18) + 'px';
     popup.style.top = (rect.top + atom.y - 20) + 'px';
-    const elements = ['C','N','O','S','H','P','F','Cl','Br','I'];
+    const elements = ['C','N','O','S','H','P','F','Cl','Br','I','B','Si','Se',
+      'Li','Na','K','Mg','Ca','Al','Mn','Cr','Fe','Co','Ni','Cu','Zn',
+      'Pd','Pt','Ru','Rh','Ir','Au','Ag','Sn'];
     for (const el of elements) {
       const btn = document.createElement('button');
       btn.textContent = el;

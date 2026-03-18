@@ -153,7 +153,8 @@ const ChemEngine = {
   // ═══════════════════════════════════════════
   // bondItems: array of {desc:"C-N", color:"#00c48c", type:"formed"|"broken"}
   // Falls back to formedBonds/brokenBonds arrays for backward compatibility
-  getSvgHighlighted(smiles, w, h, formedBonds, brokenBonds, role, bondItems) {
+  // displayMode: 'bar' (default), 'color-only' (no atom overlays), 'superscript' (small superscript numbers)
+  getSvgHighlighted(smiles, w, h, formedBonds, brokenBonds, role, bondItems, displayMode) {
     if (!smiles) return null;
     const sw = w || 250;
     const sh = h || 200;
@@ -453,12 +454,13 @@ const ChemEngine = {
         svg = this._addLegendToSvg(svg, formedBonds, brokenBonds, role);
       }
 
-      // Add numbered circles on atoms for bondItems with order numbers
-      if (Object.keys(atomBondOrderMap).length > 0) {
+      // Add atom overlays based on display mode
+      const dMode = displayMode || 'bar';
+      if (dMode !== 'color-only' && Object.keys(atomBondOrderMap).length > 0) {
         // Get precise atom positions using SAME dimensions as the final SVG
         const atomPositions = this._getAtomPositionsFromMol(mol, atoms.length, sw, sh, fontSize, lineWidth);
         if (atomPositions) {
-          svg = this._addNumberedAtomCircles(svg, atomPositions, atomBondOrderMap);
+          svg = this._addNumberedAtomCircles(svg, atomPositions, atomBondOrderMap, dMode);
         }
       }
 
@@ -633,29 +635,26 @@ const ChemEngine = {
   },
 
   // ═══════════════════════════════════════════
-  //  Add colored circle overlays on atoms involved in bond changes
-  //  Green circle = formed only, Red circle = broken only, Purple = both
-  //  atomPositions: [{idx, cx, cy}] from _getAtomPositionsFromMol
-  //  atomBondOrderMap: { atomIdx: [{order, rawColor, type}, ...] }
-  // ═══════════════════════════════════════════
-  //  Colored circle overlays + order labels on bond-change atoms
+  //  Add colored bar + text label overlays on atoms involved in bond changes
   //  Green = formed only, Red = broken only, Purple = both
-  //  Each atom shows its order numbers so users can trace SM ↔ Product
+  //  Each atom shows a colored underline bar + order label (F1, B2, etc.)
+  //  so users can trace SM ↔ Product
   // ═══════════════════════════════════════════
-  _addNumberedAtomCircles(svgStr, atomPositions, atomBondOrderMap) {
+  _addNumberedAtomCircles(svgStr, atomPositions, atomBondOrderMap, displayMode) {
     if (!svgStr || !atomPositions || !atomBondOrderMap) return svgStr;
     if (Object.keys(atomBondOrderMap).length === 0) return svgStr;
 
+    const dMode = displayMode || 'bar';
     const vbMatch = svgStr.match(/viewBox=['"]([\d.\s,eE+-]+)['"]/);
     const vb = vbMatch ? vbMatch[1].split(/[\s,]+/).map(Number) : [0, 0, 250, 200];
-    const r = vb[2] * 0.022;          // circle radius — similar to atom label size
-    const fontSize = vb[2] * 0.024;   // label font size
-    const labelR = vb[2] * 0.016;     // small badge radius
+    const fontSize = dMode === 'superscript' ? vb[2] * 0.02 : vb[2] * 0.026;
+    const barH = vb[2] * 0.009;       // color bar height (thin underline)
+    const barW = vb[2] * 0.045;       // color bar width
 
     const COLORS = {
-      formed: { stroke: '#00a86b', fill: 'rgba(0,168,107,0.18)', text: '#00a86b' },
-      broken: { stroke: '#d63031', fill: 'rgba(214,48,49,0.18)', text: '#d63031' },
-      both:   { stroke: '#7c3aed', fill: 'rgba(124,58,237,0.18)', text: '#7c3aed' }
+      formed: { bar: '#00a86b', barFill: 'rgba(0,168,107,0.75)', text: '#00a86b' },
+      broken: { bar: '#d63031', barFill: 'rgba(214,48,49,0.75)', text: '#d63031' },
+      both:   { bar: '#7c3aed', barFill: 'rgba(124,58,237,0.75)', text: '#7c3aed' }
     };
 
     let overlays = '';
@@ -690,35 +689,44 @@ const ChemEngine = {
 
       const c = COLORS[atomRole];
 
-      // ── Circle highlight around atom ──
-      overlays += `<circle cx="${pos.cx.toFixed(1)}" cy="${pos.cy.toFixed(1)}" r="${r.toFixed(1)}" fill="${c.fill}" stroke="${c.stroke}" stroke-width="2"/>`;
-
-      // ── Order number badges (top-right of atom) ──
-      // Build combined label: "F1,B2" or "B1" etc.
       const labelParts = unique.map(e => {
         const prefix = e.type === 'formed' ? 'F' : 'B';
         return { text: `${prefix}${e.order}`, type: e.type };
       });
 
-      // Position: offset to top-right
-      const badgeX = pos.cx + r * 0.7;
-      const badgeY = pos.cy - r * 0.7;
+      if (dMode === 'superscript') {
+        // ── Superscript mode: small colored text at top-right of atom ──
+        const supX = pos.cx + fontSize * 0.6;
+        const supY = pos.cy - fontSize * 0.5;
+        const fullLabel = labelParts.map(p => p.text).join(',');
+        let xOff = 0;
+        for (let i = 0; i < labelParts.length; i++) {
+          const p = labelParts[i];
+          const pColor = COLORS[p.type === 'formed' ? 'formed' : 'broken'].text;
+          const comma = i < labelParts.length - 1 ? ',' : '';
+          const str = p.text + comma;
+          overlays += `<text x="${(supX + xOff).toFixed(1)}" y="${supY.toFixed(1)}" font-size="${fontSize.toFixed(1)}" font-weight="700" font-family="Arial,sans-serif" fill="${pColor}">${str}</text>`;
+          xOff += str.length * fontSize * 0.55;
+        }
+      } else {
+        // ── Bar mode (default): colored underline bar + text label below ──
+        const bx = pos.cx - barW / 2;
+        const by = pos.cy + fontSize * 0.45;
+        overlays += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="${(barH / 2).toFixed(1)}" fill="${c.barFill}"/>`;
 
-      // Background pill for readability
-      const fullLabel = labelParts.map(p => p.text).join(',');
-      const pillW = fullLabel.length * fontSize * 0.55 + 4;
-      const pillH = fontSize + 2;
-      overlays += `<rect x="${(badgeX - 2).toFixed(1)}" y="${(badgeY - pillH + 2).toFixed(1)}" width="${pillW.toFixed(1)}" height="${pillH.toFixed(1)}" rx="3" fill="white" fill-opacity="0.85"/>`;
+        const labelY = by + barH + fontSize * 1.05;
+        const fullLabel = labelParts.map(p => p.text).join(',');
+        const totalW = fullLabel.length * fontSize * 0.55;
+        let xOff = pos.cx - totalW / 2;
 
-      // Render each part with its own color
-      let xOff = 0;
-      for (let i = 0; i < labelParts.length; i++) {
-        const p = labelParts[i];
-        const pColor = COLORS[p.type === 'formed' ? 'formed' : 'broken'].text;
-        const comma = i < labelParts.length - 1 ? ',' : '';
-        const str = p.text + comma;
-        overlays += `<text x="${(badgeX + xOff).toFixed(1)}" y="${(badgeY).toFixed(1)}" font-size="${fontSize.toFixed(1)}" font-weight="700" font-family="Arial,sans-serif" fill="${pColor}">${str}</text>`;
-        xOff += str.length * fontSize * 0.55;
+        for (let i = 0; i < labelParts.length; i++) {
+          const p = labelParts[i];
+          const pColor = COLORS[p.type === 'formed' ? 'formed' : 'broken'].text;
+          const comma = i < labelParts.length - 1 ? ',' : '';
+          const str = p.text + comma;
+          overlays += `<text x="${xOff.toFixed(1)}" y="${labelY.toFixed(1)}" font-size="${fontSize.toFixed(1)}" font-weight="700" font-family="Arial,sans-serif" fill="${pColor}">${str}</text>`;
+          xOff += str.length * fontSize * 0.55;
+        }
       }
     }
 

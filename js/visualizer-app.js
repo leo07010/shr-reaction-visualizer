@@ -21,12 +21,17 @@ const VisualizerApp = {
   selRect: null,
   selStart: { x: 0, y: 0 },
 
+  // Display mode: 'bar' | 'color-only' | 'superscript'
+  displayMode: 'bar',
+
   // Bond marking mode: null | 'formed' | 'broken'
   markMode: null,
   // Atom-based marking state
   _markFirstAtom: null,  // {atom, molBox, svgEl, abData}
   markHistory: [],        // undo stack: [{type, svgEl, overlayIds, box}]
   _markOverlayCounter: 0, // unique IDs for overlay SVG elements
+  // Annotator tracking
+  _annotator: '',
 
   init(data) {
     this.canvas = document.getElementById('vizCanvas');
@@ -34,6 +39,8 @@ const VisualizerApp = {
     this.renderDOIList();
     this.initCanvasControls();
     this._createSelectionOverlay();
+    // Restore annotator name from localStorage
+    this._getAnnotator();
   },
 
   // ─── Data Grouping ───
@@ -206,6 +213,27 @@ const VisualizerApp = {
 
   zoomIn()  { this.scale = Math.min(3, this.scale + 0.15); this.applyCanvasTransform(); this.updateZoomLabel(); },
   zoomOut() { this.scale = Math.max(0.2, this.scale - 0.15); this.applyCanvasTransform(); this.updateZoomLabel(); },
+
+  setDisplayMode(mode) {
+    this.displayMode = mode || 'bar';
+    // Re-render current reaction to apply new display mode
+    if (this.currentDOI) this.selectReaction(this.currentDOI);
+  },
+
+  setAnnotator(name) {
+    this._annotator = (name || '').trim();
+    // Persist in localStorage for convenience
+    try { localStorage.setItem('shr_annotator', this._annotator); } catch(e) {}
+  },
+
+  _getAnnotator() {
+    if (!this._annotator) {
+      try { this._annotator = localStorage.getItem('shr_annotator') || ''; } catch(e) {}
+      const el = document.getElementById('vizAnnotator');
+      if (el && this._annotator) el.value = this._annotator;
+    }
+    return this._annotator;
+  },
 
   fitToView() {
     if (!this.elements.length) return;
@@ -701,18 +729,21 @@ const VisualizerApp = {
       const cacheKey = smSmi && prodSmi ? `${smSmi}|${prodSmi}` : null;
       const mcsData = cacheKey ? this._bondChangeCache[cacheKey] : null;
 
-      // Read bonds from CSV columns first
+      // Read bonds from CSV columns — number formed and broken separately
+      let formedCount = 0, brokenCount = 0;
       for (let i = 1; i <= 8; i++) {
         const f = step[`Formed ${i}`];
         const b = step[`Broken ${i}`];
         if (f && f.trim()) {
-          const item = { desc: f.trim(), color: '#00c48c', type: 'formed' };
+          formedCount++;
+          const item = { desc: f.trim(), color: '#00c48c', type: 'formed', order: formedCount };
           // Try to find matching MCS atom indices for this descriptor
           if (mcsData) this._enrichBondWithMCS(item, mcsData);
           alternatingBonds.push(item);
         }
         if (b && b.trim()) {
-          const item = { desc: b.trim(), color: '#ff6b6b', type: 'broken' };
+          brokenCount++;
+          const item = { desc: b.trim(), color: '#ff6b6b', type: 'broken', order: brokenCount };
           if (mcsData) this._enrichBondWithMCS(item, mcsData);
           alternatingBonds.push(item);
         }
@@ -728,14 +759,14 @@ const VisualizerApp = {
           if (i < (mcsData.formed || []).length) {
             const f = mcsData.formed[i];
             alternatingBonds.push({
-              desc: f.desc, color: '#00c48c', type: 'formed',
+              desc: f.desc, color: '#00c48c', type: 'formed', order: i + 1,
               smAtoms: f.sm_atoms, prodAtoms: f.prod_atoms
             });
           }
           if (i < (mcsData.broken || []).length) {
             const b = mcsData.broken[i];
             alternatingBonds.push({
-              desc: b.desc, color: '#ff6b6b', type: 'broken',
+              desc: b.desc, color: '#ff6b6b', type: 'broken', order: i + 1,
               smAtoms: b.sm_atoms, prodAtoms: b.prod_atoms
             });
           }
@@ -748,18 +779,22 @@ const VisualizerApp = {
         if (autoDetected) {
           const maxLen = Math.max(autoDetected.formed.length, autoDetected.broken.length);
           for (let i = 0; i < maxLen; i++) {
-            if (i < autoDetected.formed.length) alternatingBonds.push({ desc: autoDetected.formed[i], color: '#00c48c', type: 'formed' });
-            if (i < autoDetected.broken.length) alternatingBonds.push({ desc: autoDetected.broken[i], color: '#ff6b6b', type: 'broken' });
+            if (i < autoDetected.formed.length) alternatingBonds.push({ desc: autoDetected.formed[i], color: '#00c48c', type: 'formed', order: i + 1 });
+            if (i < autoDetected.broken.length) alternatingBonds.push({ desc: autoDetected.broken[i], color: '#ff6b6b', type: 'broken', order: i + 1 });
           }
         }
       }
 
       // Store editable state - each bond has {desc, color, type, order, atomIdx, smAtoms, prodAtoms}
+      // Order is pre-assigned per type: F1,F2,F3... and B1,B2,B3... separately
       const stepKey = `${doi}_step${idx}`;
       if (!this._stepBondData[stepKey]) {
+        let fOrd = 0, bOrd = 0;
         this._stepBondData[stepKey] = {
-          bondItems: alternatingBonds.map((item, i) => ({
-            ...item, order: i + 1, atomIdx: null
+          bondItems: alternatingBonds.map(item => ({
+            ...item,
+            order: item.order || (item.type === 'formed' ? ++fOrd : ++bOrd),
+            atomIdx: null
           }))
         };
       }
@@ -929,10 +964,11 @@ const VisualizerApp = {
 
       if (smiles) {
         let svg;
+        const dispMode = this.displayMode || 'bar';
         if (bondItems && bondItems.length) {
-          svg = ChemEngine.getSvgHighlighted(smiles, molW, molH, null, null, molRole || 'both', bondItems);
+          svg = ChemEngine.getSvgHighlighted(smiles, molW, molH, null, null, molRole || 'both', bondItems, dispMode);
         } else if ((formedBonds && formedBonds.length) || (brokenBonds && brokenBonds.length)) {
-          svg = ChemEngine.getSvgHighlighted(smiles, molW, molH, formedBonds, brokenBonds, molRole || 'both');
+          svg = ChemEngine.getSvgHighlighted(smiles, molW, molH, formedBonds, brokenBonds, molRole || 'both', null, dispMode);
         } else {
           svg = ChemEngine.getSvg(smiles, molW, molH);
         }
@@ -1256,7 +1292,6 @@ const VisualizerApp = {
 
       const mode = this.markMode;
       const color = mode === 'formed' ? '#00c48c' : '#ff6b6b';
-      const glowColor = mode === 'formed' ? 'rgba(0,196,140,0.4)' : 'rgba(255,107,107,0.4)';
       const overlayIds = [];
 
       // Build bond descriptor with atom indices
@@ -1273,7 +1308,9 @@ const VisualizerApp = {
         orderNum = state.bondItems.length + 1;
         state.bondItems.push({
           desc: bondDesc, color, type: mode,
-          order: orderNum, atomIdx
+          order: orderNum, atomIdx,
+          annotator: this._getAnnotator() || 'anonymous',
+          timestamp: new Date().toISOString()
         });
       }
 
@@ -1289,24 +1326,43 @@ const VisualizerApp = {
       const perpY = dx / bondLen;
       const labelOffset = vb[2] * 0.055; // distance from atom to label
 
+      // ── Color bar + text label style (no circles) ──
+      const barW = vb[2] * 0.045;
+      const barH = vb[2] * 0.009;
+      const markFontSize = vb[2] * 0.03;
+
+      // Helper: add a color bar + text label under an atom
+      const addAtomBarLabel = (atom, labelStr) => {
+        const bx = atom.cx - barW / 2;
+        const by = atom.cy + markFontSize * 0.5;
+        const barId = this._addSvgOverlay(svgEl, 'rect', {
+          x: bx, y: by, width: barW, height: barH,
+          rx: barH / 2, fill: color, opacity: 0.75
+        });
+        const txtId = this._addSvgOverlay(svgEl, 'text', {
+          x: atom.cx, y: by + barH + markFontSize * 1.0,
+          'text-anchor': 'middle', 'dominant-baseline': 'auto',
+          'font-size': markFontSize, 'font-weight': '700', 'font-family': 'sans-serif',
+          fill: color, _text: labelStr
+        });
+        return [barId, txtId];
+      };
+
       if (bond) {
-        // ── Adjacent atoms → highlight the BOND between them ──
-        const id1 = this._addSvgOverlay(svgEl, 'circle', {
-          cx: first.cx, cy: first.cy, r: vb[2] * 0.025,
-          fill: glowColor, stroke: color, 'stroke-width': 1.5
-        });
-        const id2 = this._addSvgOverlay(svgEl, 'circle', {
-          cx: second.cx, cy: second.cy, r: vb[2] * 0.025,
-          fill: glowColor, stroke: color, 'stroke-width': 1.5
-        });
+        // ── Adjacent atoms → highlight the BOND line between them ──
         const id3 = this._addSvgOverlay(svgEl, 'line', {
           x1: first.cx, y1: first.cy, x2: second.cx, y2: second.cy,
           stroke: color, 'stroke-width': vb[2] * 0.02,
-          'stroke-linecap': 'round', opacity: 0.7
+          'stroke-linecap': 'round', opacity: 0.5
         });
-        overlayIds.push(id1, id2, id3);
+        overlayIds.push(id3);
 
-        // Label order number near midpoint, offset perpendicular to bond
+        // Color bar + order label under each atom
+        const ids1 = addAtomBarLabel(first, `${first.element}${first.idx + 1}`);
+        const ids2 = addAtomBarLabel(second, `${second.element}${second.idx + 1}`);
+        overlayIds.push(...ids1, ...ids2);
+
+        // Order number label near midpoint, offset perpendicular to bond
         const mx = (first.cx + second.cx) / 2;
         const my = (first.cy + second.cy) / 2;
         const id4 = this._addSvgOverlay(svgEl, 'text', {
@@ -1317,79 +1373,61 @@ const VisualizerApp = {
         });
         overlayIds.push(id4);
 
-        // Individual atom labels on OPPOSITE sides of the bond
-        const id5 = this._addSvgOverlay(svgEl, 'text', {
-          x: first.cx + perpX * labelOffset, y: first.cy + perpY * labelOffset,
-          'text-anchor': 'middle', 'dominant-baseline': 'central',
-          'font-size': vb[2] * 0.03, 'font-weight': '600', 'font-family': 'sans-serif',
-          fill: color, _text: `${first.element}${first.idx + 1}`
-        });
-        const id6 = this._addSvgOverlay(svgEl, 'text', {
-          x: second.cx - perpX * labelOffset, y: second.cy - perpY * labelOffset,
-          'text-anchor': 'middle', 'dominant-baseline': 'central',
-          'font-size': vb[2] * 0.03, 'font-weight': '600', 'font-family': 'sans-serif',
-          fill: color, _text: `${second.element}${second.idx + 1}`
-        });
-        overlayIds.push(id5, id6);
-
       } else {
-        // ── Non-adjacent atoms → mark each individually ──
-        const r = vb[2] * 0.035;
-        const id1 = this._addSvgOverlay(svgEl, 'circle', {
-          cx: first.cx, cy: first.cy, r,
-          fill: glowColor, stroke: color, 'stroke-width': 2
-        });
-        const id2 = this._addSvgOverlay(svgEl, 'circle', {
-          cx: second.cx, cy: second.cy, r,
-          fill: glowColor, stroke: color, 'stroke-width': 2
-        });
-        overlayIds.push(id1, id2);
+        // ── Non-adjacent atoms → mark each with bar + label ──
+        const ids1 = addAtomBarLabel(first, `${first.element}(${first.idx + 1})`);
+        const ids2 = addAtomBarLabel(second, `${second.element}(${second.idx + 1})`);
+        overlayIds.push(...ids1, ...ids2);
 
-        // Labels on OPPOSITE sides: first atom label above-left, second atom label below-right
-        const id3 = this._addSvgOverlay(svgEl, 'text', {
-          x: first.cx + perpX * labelOffset, y: first.cy + perpY * labelOffset,
+        // Order number label between the two atoms
+        const mx = (first.cx + second.cx) / 2;
+        const my = (first.cy + second.cy) / 2;
+        const idLabel = this._addSvgOverlay(svgEl, 'text', {
+          x: mx + perpX * labelOffset * 0.5, y: my + perpY * labelOffset * 0.5,
           'text-anchor': 'middle', 'dominant-baseline': 'central',
-          'font-size': vb[2] * 0.035, 'font-weight': '600', 'font-family': 'sans-serif',
-          fill: color, _text: `${first.element}(${first.idx + 1})`
+          'font-size': vb[2] * 0.035, 'font-weight': '700', 'font-family': 'sans-serif',
+          fill: color, _text: labelText
         });
-        const id4 = this._addSvgOverlay(svgEl, 'text', {
-          x: second.cx - perpX * labelOffset, y: second.cy - perpY * labelOffset,
-          'text-anchor': 'middle', 'dominant-baseline': 'central',
-          'font-size': vb[2] * 0.035, 'font-weight': '600', 'font-family': 'sans-serif',
-          fill: color, _text: `${second.element}(${second.idx + 1})`
-        });
-        overlayIds.push(id3, id4);
+        overlayIds.push(idLabel);
       }
 
       // Push to undo stack with stepKey for _stepBondData removal
+      const annotator = this._getAnnotator();
       this.markHistory.push({
         type: bond ? 'bond' : 'atoms',
         svgEl, overlayIds, mode, box,
         stepKey: stepKey || null,
-        desc: bondDesc
+        desc: bondDesc,
+        annotator: annotator || 'anonymous',
+        timestamp: new Date().toISOString()
       });
 
       this._markFirstAtom = null;
-      const toastMsg = orderNum ? `#${orderNum} ${bondDesc} (${mode})` : `${bondDesc} (${mode})`;
+      const byStr = annotator ? ` by ${annotator}` : '';
+      const toastMsg = orderNum ? `#${orderNum} ${bondDesc} (${mode})${byStr}` : `${bondDesc} (${mode})${byStr}`;
       toast(`Marked ${toastMsg}`, 'success');
     });
   },
 
-  // Draw a temporary highlight circle on an atom (for pending first-atom selection)
+  // Draw a temporary highlight bar on an atom (for pending first-atom selection)
   _drawAtomHighlight(svgEl, atom, type) {
     const vb = svgEl.getAttribute('viewBox')?.split(/[\s,]+/).map(Number) || [0, 0, 250, 200];
-    const r = vb[2] * 0.04;
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('cx', atom.cx);
-    circle.setAttribute('cy', atom.cy);
-    circle.setAttribute('r', r);
-    circle.setAttribute('fill', 'rgba(255,165,0,0.35)');
-    circle.setAttribute('stroke', '#ffa500');
-    circle.setAttribute('stroke-width', '2');
-    circle.setAttribute('stroke-dasharray', '3,2');
-    circle.classList.add('cv-atom-select-pending');
-    circle.style.pointerEvents = 'none';
-    svgEl.appendChild(circle);
+    const barW = vb[2] * 0.05;
+    const barH = vb[2] * 0.01;
+    const bar = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bar.setAttribute('x', atom.cx - barW / 2);
+    bar.setAttribute('y', atom.cy + vb[2] * 0.012);
+    bar.setAttribute('width', barW);
+    bar.setAttribute('height', barH);
+    bar.setAttribute('rx', barH / 2);
+    bar.setAttribute('fill', '#ffa500');
+    bar.setAttribute('opacity', '0.7');
+    bar.setAttribute('stroke', '#ffa500');
+    bar.setAttribute('stroke-width', '0.5');
+    bar.setAttribute('stroke-dasharray', '3,2');
+    bar.classList.add('cv-atom-select-pending');
+    bar.style.pointerEvents = 'none';
+    svgEl.appendChild(bar);
   },
 
   // Add an SVG overlay element and return its unique data-mark-id

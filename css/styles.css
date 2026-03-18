@@ -94,6 +94,8 @@ padding:6px 10px;border-radius:6px;cursor:pointer;font-size:12px;transition:.15s
 .viz-tb-btn.active{background:rgba(0,180,216,.15);border-color:var(--accent);color:var(--accent)}
 .viz-tb-sep{width:1px;height:24px;background:var(--border);margin:0 6px}
 .viz-zoom-label{font-size:11px;color:var(--muted);min-width:36px;text-align:center}
+.viz-display-mode{font-size:11px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;
+background:#fff;color:var(--text);cursor:pointer;outline:none}
 
 /* The canvas itself */
 .viz-canvas{flex:1;overflow:hidden;position:relative;
@@ -128,7 +130,7 @@ padding:3px 10px;border-radius:10px;text-align:center}
 
 /* Title */
 .cv-title{font-size:20px;font-weight:700;color:#333;padding:8px 16px;background:#fff;
-border-radius:10px;border:2px solid #e0e4ec;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+border-radius:10px;border:2px solid #e0e4ec;box-shadow:0 2px 8px rgba(0,0,0,.06);white-space:nowrap}
 .cv-title a{color:var(--primary);text-decoration:underline}
 
 /* Plus sign */
