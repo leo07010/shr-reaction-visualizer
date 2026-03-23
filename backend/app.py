@@ -53,7 +53,7 @@ print(f"Loaded {len(REACTION_DATA)} reaction entries")
 def mol_to_svg(smiles, width=200, height=150):
     """Convert SMILES to SVG string."""
     try:
-        mol = Chem.MolFromSmiles(smiles)
+        mol = _try_parse_smiles(smiles)
         if mol is None:
             return None
         AllChem.Compute2DCoords(mol)
@@ -117,7 +117,7 @@ def search():
                 continue
 
             try:
-                mol = Chem.MolFromSmiles(smiles)
+                mol = _try_parse_smiles(smiles)
                 if mol is None:
                     continue
                 if mol.HasSubstructMatch(query_mol):
@@ -164,13 +164,42 @@ def mol_svg():
 
 ORDER_SYM = {1.0: '-', 2.0: '=', 3.0: '#', 1.5: '~'}
 
+import re
+_TEMPLATE_RE = re.compile(r'\[R\d*\]|\[R\'\]|\[Ar\d*\]|\[XH?\]|\[M\]|\[Lg?\]|\[Nu\]', re.IGNORECASE)
+
+def _replace_template_placeholders(smiles):
+    """Replace [R], [R1], [R2], [Ar], etc. with RDKit dummy atoms [*]."""
+    if not smiles:
+        return smiles
+    s = re.sub(r'\[R(\d+)\]', lambda m: f'[*:{m.group(1)}]', smiles)
+    s = re.sub(r"\[R'\]", '[*:3]', s)
+    s = s.replace('[R]', '[*]')
+    s = re.sub(r'\[Ar(\d*)\]', lambda m: f'[*:{10 + int(m.group(1))}]' if m.group(1) else '[*:10]', s, flags=re.IGNORECASE)
+    s = re.sub(r'\[XH?\]', '[*:11]', s, flags=re.IGNORECASE)
+    s = re.sub(r'\[M\]', '[*:12]', s, flags=re.IGNORECASE)
+    s = re.sub(r'\[Lg?\]', '[*:13]', s, flags=re.IGNORECASE)
+    s = re.sub(r'\[Nu\]', '[*:14]', s, flags=re.IGNORECASE)
+    return s
+
+def _try_parse_smiles(smiles):
+    """Try to parse SMILES, with template placeholder replacement as fallback."""
+    mol = Chem.MolFromSmiles(smiles)
+    if mol:
+        return mol
+    if _TEMPLATE_RE.search(smiles):
+        converted = _replace_template_placeholders(smiles)
+        mol = Chem.MolFromSmiles(converted)
+        if mol:
+            return mol
+    return None
+
 def compute_bond_changes(sm_smiles, prod_smiles):
     """
     Compute exact bond changes between SM and Product using fragment-based
     MCS atom-atom mapping. Returns formed/broken bonds with specific atom indices.
     """
-    sm_mol = Chem.MolFromSmiles(sm_smiles)
-    prod_mol = Chem.MolFromSmiles(prod_smiles)
+    sm_mol = _try_parse_smiles(sm_smiles)
+    prod_mol = _try_parse_smiles(prod_smiles)
     if not sm_mol or not prod_mol:
         return None
 

@@ -33,12 +33,53 @@ const ChemEngine = {
     return this.TEMPLATE_RE.test(smiles);
   },
 
+  // Replace template placeholders [R], [R1], [R2], [Ar], etc. with RDKit dummy atoms [*]
+  // so that template SMILES can still be rendered as molecules with * at generic positions
+  _replaceTemplatePlaceholders(smiles) {
+    if (!smiles) return smiles;
+    // [R1] → [*:1], [R2] → [*:2], [R'] → [*:3], [R] → [*]
+    // [Ar] → [*:10], [X] → [*:11], [M] → [*:12], [L] → [*:13], [Nu] → [*:14], [Lg] → [*:15]
+    let s = smiles;
+    s = s.replace(/\[R(\d+)\]/g, (_, n) => `[*:${n}]`);
+    s = s.replace(/\[R'\]/g, '[*:3]');
+    s = s.replace(/\[R\]/g, '[*]');
+    s = s.replace(/\[Ar(\d*)\]/gi, (_, n) => n ? `[*:${10 + parseInt(n)}]` : '[*:10]');
+    s = s.replace(/\[XH?\]/gi, '[*:11]');
+    s = s.replace(/\[M\]/gi, '[*:12]');
+    s = s.replace(/\[Lg?\]/gi, '[*:13]');
+    s = s.replace(/\[Nu\]/gi, '[*:14]');
+    return s;
+  },
+
   // ═══════════════════════════════════════════
   //  SMILES Parsing with fallbacks
   // ═══════════════════════════════════════════
   _tryGetMol(smiles) {
     if (!this.ready || !smiles) return null;
     let mol;
+
+    // Attempt 0: if template SMILES, replace placeholders with dummy atoms first
+    if (this.isTemplateSMILES(smiles)) {
+      const converted = this._replaceTemplatePlaceholders(smiles);
+      try {
+        mol = this.rdkit.get_mol(converted);
+        if (mol && mol.is_valid()) return mol;
+        if (mol) mol.delete();
+      } catch(e) {}
+      // Also try with relaxed sanitization
+      try {
+        mol = this.rdkit.get_mol(converted, JSON.stringify({sanitize: false}));
+        if (mol && mol.is_valid()) return mol;
+        if (mol) mol.delete();
+      } catch(e) {}
+      // Try without stereochemistry
+      try {
+        const noStereo = converted.replace(/@+/g, '').replace(/[/\\]/g, '');
+        mol = this.rdkit.get_mol(noStereo);
+        if (mol && mol.is_valid()) return mol;
+        if (mol) mol.delete();
+      } catch(e) {}
+    }
 
     // Attempt 1: parse as-is
     try {
@@ -824,7 +865,6 @@ const ChemEngine = {
   // ═══════════════════════════════════════════
   detectBondChanges(smilesSM, smilesProduct) {
     if (!this.ready || !smilesSM || !smilesProduct) return null;
-    if (this.isTemplateSMILES(smilesSM) || this.isTemplateSMILES(smilesProduct)) return null;
 
     const ELEMENT_MAP = {1:'H',5:'B',6:'C',7:'N',8:'O',9:'F',12:'Mg',13:'Al',14:'Si',15:'P',16:'S',17:'Cl',
       24:'Cr',25:'Mn',26:'Fe',27:'Co',28:'Ni',29:'Cu',30:'Zn',33:'As',34:'Se',35:'Br',46:'Pd',47:'Ag',
@@ -889,7 +929,6 @@ const ChemEngine = {
   // ═══════════════════════════════════════════
   getAtomBondData(smiles) {
     if (!this.ready || !smiles) return null;
-    if (this.isTemplateSMILES(smiles)) return null;
 
     const mol = this._tryGetMol(smiles);
     if (!mol) return null;
