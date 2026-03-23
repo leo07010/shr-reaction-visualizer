@@ -53,15 +53,15 @@ border-radius:10px;font-size:15px;cursor:pointer;transition:.2s}
 
 /* === Labs & Contributors Section === */
 .labs-section{max-width:1100px;margin:48px auto 40px;padding:0 32px}
-.labs-title{font-size:22px;font-weight:700;color:var(--text);text-align:center;margin-bottom:28px}
 .labs-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}
 .lab-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;transition:border-color .2s}
 .lab-card:hover{border-color:var(--accent)}
 .lab-header{display:flex;align-items:center;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)}
 .lab-logo-link{text-decoration:none;flex-shrink:0}
 .lab-logo-img{width:56px;height:56px;object-fit:contain;border-radius:10px;padding:4px}
-.matter-lab-bg{background:#fff}
-.yudin-lab-bg{background:#1a2744;padding:6px}
+.matter-lab-bg{background:#1e2e2a;border-radius:10px;padding:6px}
+.lab-logo-text{width:56px;height:56px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;text-align:center;line-height:1.2;flex-shrink:0}
+.yudin-lab-bg{background:linear-gradient(135deg,#1a365d,#2563eb);padding:6px}
 .lab-info h3{font-size:18px;font-weight:700;margin-bottom:2px}
 .lab-info h3 a{color:var(--text);text-decoration:none;transition:color .2s}
 .lab-info h3 a:hover{color:var(--accent)}
@@ -69,6 +69,7 @@ border-radius:10px;font-size:15px;cursor:pointer;transition:.2s}
 .lab-members{display:flex;flex-direction:column;gap:8px}
 .member{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.03);transition:background .15s}
 .member:hover{background:rgba(0,180,216,.06)}
+.member.lead{border-left:3px solid var(--ok);background:rgba(0,196,140,.06)}
 .member.pi{border-left:3px solid var(--accent)}
 .member-name{font-size:14px;font-weight:600;color:var(--text)}
 .member-role{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
