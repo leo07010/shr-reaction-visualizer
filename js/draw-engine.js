@@ -21,7 +21,8 @@ const DrawEngine = {
   // ── Tool display names for status indicator ──
   TOOL_NAMES: {
     select:'Select / Move', bond:'Single Bond', double:'Double Bond', triple:'Triple Bond',
-    ring6:'Hexagon', ring5:'Pentagon', benzene:'Benzene', atom:'Place Atom', eraser:'Eraser', fragment:'Functional Group'
+    ring6:'Hexagon', ring5:'Pentagon', benzene:'Benzene', atom:'Place Atom', eraser:'Eraser', fragment:'Functional Group',
+    charge_plus:'Add + Charge', charge_minus:'Add − Charge', radical:'Add Radical ·'
   },
 
   init(canvasId, areaId) {
@@ -149,6 +150,41 @@ const DrawEngine = {
     this.setTool('atom');
     document.querySelectorAll('#drawElemGrid .el-btn').forEach(b => b.classList.toggle('on', b.dataset.e === el));
     this._updateToolIndicator();
+  },
+
+  // ── Charge & Radical tools ──
+  // Click an atom to add/modify charge or radical
+  setChargeTool(delta) {
+    this.curTool = delta > 0 ? 'charge_plus' : 'charge_minus';
+    this._chargeDelta = delta;
+    this.canvas.style.cursor = 'pointer';
+    document.querySelectorAll('#drawToolbar .dtb-btn').forEach(b => b.classList.toggle('on', b.dataset.t === this.curTool));
+    this._updateToolIndicator();
+  },
+
+  setRadicalTool() {
+    this.curTool = 'radical';
+    this.canvas.style.cursor = 'pointer';
+    document.querySelectorAll('#drawToolbar .dtb-btn').forEach(b => b.classList.toggle('on', b.dataset.t === 'radical'));
+    this._updateToolIndicator();
+  },
+
+  applyCharge(atom, delta) {
+    this.pushUndo();
+    atom.charge = (atom.charge || 0) + delta;
+    // Clamp to ±3
+    atom.charge = Math.max(-3, Math.min(3, atom.charge));
+    if (atom.charge === 0) delete atom.charge;
+    this.render();
+    this.updateSmiles();
+  },
+
+  toggleRadical(atom) {
+    this.pushUndo();
+    atom.radical = atom.radical ? 0 : 1;
+    if (!atom.radical) delete atom.radical;
+    this.render();
+    this.updateSmiles();
   },
 
   _updateToolIndicator() {
@@ -280,13 +316,44 @@ const DrawEngine = {
 
     // Atoms
     for(const a of this.atoms){
-      const deg=this.atomDeg(a), show=a.elem!=='C'||deg===0||a.explicit;
+      const deg=this.atomDeg(a), show=a.elem!=='C'||deg===0||a.explicit||a.charge||a.radical;
       if(show){
         ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(a.x,a.y,13,0,Math.PI*2);ctx.fill();
         ctx.fillStyle=this.ECOLORS[a.elem]||'#333';ctx.font='bold 15px "Segoe UI",sans-serif';
         ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(a.elem,a.x,a.y+1);
+
+        // Draw charge superscript (top-right)
+        if(a.charge){
+          const chStr = a.charge > 0
+            ? (a.charge > 1 ? a.charge + '+' : '+')
+            : (a.charge < -1 ? Math.abs(a.charge) + '−' : '−');
+          ctx.font='bold 11px "Segoe UI",sans-serif';
+          ctx.fillStyle=a.charge>0?'#2196F3':'#E53935';
+          ctx.textAlign='left';ctx.textBaseline='top';
+          ctx.fillText(chStr,a.x+10,a.y-15);
+        }
+        // Draw radical dot (top-right, offset from charge)
+        if(a.radical){
+          const rdx = a.charge ? 22 : 14;
+          ctx.fillStyle='#FF9800';ctx.beginPath();
+          ctx.arc(a.x+rdx,a.y-10,3,0,Math.PI*2);ctx.fill();
+        }
       } else {
         ctx.fillStyle='#333';ctx.beginPath();ctx.arc(a.x,a.y,2.5,0,Math.PI*2);ctx.fill();
+        // Even implicit C atoms can have charge/radical
+        if(a.charge){
+          const chStr = a.charge > 0
+            ? (a.charge > 1 ? a.charge + '+' : '+')
+            : (a.charge < -1 ? Math.abs(a.charge) + '−' : '−');
+          ctx.font='bold 10px "Segoe UI",sans-serif';
+          ctx.fillStyle=a.charge>0?'#2196F3':'#E53935';
+          ctx.textAlign='left';ctx.textBaseline='top';
+          ctx.fillText(chStr,a.x+5,a.y-12);
+        }
+        if(a.radical){
+          ctx.fillStyle='#FF9800';ctx.beginPath();
+          ctx.arc(a.x+(a.charge?16:8),a.y-8,3,0,Math.PI*2);ctx.fill();
+        }
       }
       // Hover highlight
       if(this.hoverAtom && this.hoverAtom.id===a.id){
@@ -326,6 +393,7 @@ const DrawEngine = {
       for (const a of this.atoms) {
         const x = (a.x / 50).toFixed(4);
         const y = (-a.y / 50).toFixed(4);
+        // Use M CHG / M RAD lines instead of atom block charge field for RDKit.js compatibility
         mb += x.padStart(10) + y.padStart(10) + '    0.0000 ' + a.elem.padEnd(3) + ' 0  0  0  0  0  0  0  0  0  0  0  0\n';
       }
       for (const b of this.bonds) {
@@ -333,9 +401,34 @@ const DrawEngine = {
         const bt = b.type === 'double' ? 2 : b.type === 'triple' ? 3 : 1;
         mb += String(a1).padStart(3) + String(a2).padStart(3) + String(bt).padStart(3) + '  0  0  0  0\n';
       }
+      // Add M  CHG lines for charges (more reliable than atom block field)
+      const chargedAtoms = this.atoms.filter(a => a.charge);
+      if (chargedAtoms.length) {
+        mb += 'M  CHG' + String(chargedAtoms.length).padStart(3);
+        for (const a of chargedAtoms) {
+          mb += String(idxMap[a.id] + 1).padStart(4) + String(a.charge).padStart(4);
+        }
+        mb += '\n';
+      }
+      // Add M  RAD lines for radicals
+      const radAtoms = this.atoms.filter(a => a.radical);
+      if (radAtoms.length) {
+        mb += 'M  RAD' + String(radAtoms.length).padStart(3);
+        for (const a of radAtoms) {
+          mb += String(idxMap[a.id] + 1).padStart(4) + '   2'; // 2 = doublet
+        }
+        mb += '\n';
+      }
       mb += 'M  END\n';
 
-      const mol = ChemEngine.rdkit.get_mol(mb);
+      // Use relaxed parsing when charges/radicals present (M CHG/RAD lines need sanitize:false)
+      const hasChargeOrRad = this.atoms.some(a => a.charge || a.radical);
+      let mol;
+      if (hasChargeOrRad) {
+        mol = ChemEngine.rdkit.get_mol(mb, JSON.stringify({sanitize: false}));
+      } else {
+        mol = ChemEngine.rdkit.get_mol(mb);
+      }
       if (!mol || !mol.is_valid()) { if(mol)mol.delete(); return null; }
       const smiles = mol.get_smiles();
       mol.delete();
@@ -455,6 +548,12 @@ const DrawEngine = {
           if(bond){this.pushUndo();this.removeBond(bond);this.hoverBond=null;this.render();this.updateSmiles();}
         }
         return;
+      }
+      if(this.curTool==='charge_plus'||this.curTool==='charge_minus'){
+        if(atom){this.applyCharge(atom,this._chargeDelta);} return;
+      }
+      if(this.curTool==='radical'){
+        if(atom){this.toggleRadical(atom);} return;
       }
       if(this.curTool==='atom'){
         this.pushUndo(); if(atom){atom.elem=this.curElem;atom.explicit=true;} else this.addAtom(pos.x,pos.y,this.curElem,true); this.render(); this.updateSmiles(); return;

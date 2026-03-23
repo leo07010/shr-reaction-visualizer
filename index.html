@@ -231,6 +231,10 @@ Drag to move · Edge to resize · Click two atoms to mark bond · Drag blank are
 <button class="dtb-btn" data-t="atom" title="Atom Label (A)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/></svg><span class="dtb-label">A</span></button>
 <button class="dtb-btn" data-t="eraser" title="Eraser (E)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 20H7L3 16l10-10 8 8-4 4"/><line x1="7" y1="20" x2="20" y2="20"/></svg><span class="dtb-label">E</span></button>
 <div class="dtb-sep"></div>
+<button class="dtb-btn" data-t="charge_plus" title="Add + Charge" onclick="DrawEngine.setChargeTool(1)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2196F3" stroke-width="3"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span class="dtb-label" style="color:#2196F3">+</span></button>
+<button class="dtb-btn" data-t="charge_minus" title="Add − Charge" onclick="DrawEngine.setChargeTool(-1)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E53935" stroke-width="3"><line x1="5" y1="12" x2="19" y2="12"/></svg><span class="dtb-label" style="color:#E53935">−</span></button>
+<button class="dtb-btn" data-t="radical" title="Add Radical ·" onclick="DrawEngine.setRadicalTool()"><svg width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4" fill="#FF9800"/></svg><span class="dtb-label" style="color:#FF9800">·</span></button>
+<div class="dtb-sep"></div>
 <button class="dtb-btn" data-t="undo" title="Undo (Ctrl+Z)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg></button>
 <button class="dtb-btn" data-t="clear" title="Clear All"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
 </div>
