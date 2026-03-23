@@ -204,15 +204,15 @@ const ChemEngine = {
     const mol = this._tryGetMol(smiles);
     if (!mol) return this._generateFallbackSvg(smiles, sw, sh);
 
-    // Scale font/line for larger renders
+    // Scale font/line for larger renders, accounting for molecule complexity
     const scale = Math.min(sw, sh) / 200;
-    const fontSize = Math.max(12, Math.round(14 * scale));
-    const lineWidth = Math.max(1.5, 1.8 * scale);
 
     try {
       let molJSON;
       try { molJSON = mol.get_json(); } catch(e) { molJSON = null; }
       if (!molJSON) {
+        const fontSize = Math.max(12, Math.round(14 * scale));
+        const lineWidth = Math.max(1.5, Math.min(2.5, 1.8 * scale));
         const details = JSON.stringify({
           width: sw, height: sh,
           clearBackground: false, addStereoAnnotation: true,
@@ -223,6 +223,13 @@ const ChemEngine = {
       const molData = JSON.parse(molJSON);
       const atoms = molData.molecules?.[0]?.atoms || [];
       const bonds = molData.molecules?.[0]?.bonds || [];
+
+      // Adjust line width based on atom count: small molecules get thinner lines
+      // to avoid overly thick rendering in large boxes
+      const atomCount = atoms.length || 1;
+      const complexityFactor = Math.min(1.0, Math.max(0.5, atomCount / 15));
+      const fontSize = Math.max(12, Math.round(14 * scale * complexityFactor));
+      const lineWidth = Math.max(1.2, Math.min(2.8, 1.8 * scale * complexityFactor));
       if (!atoms.length || !bonds.length) {
         const details = JSON.stringify({
           clearBackground: false, addStereoAnnotation: true,
@@ -484,7 +491,11 @@ const ChemEngine = {
       if (highlightBonds.length > 0) {
         details.bonds = highlightBonds;
         details.highlightBondColors = highlightBondColors;
-        details.highlightBondWidthMultiplier = 8;
+        // Scale bond highlight width inversely with lineWidth to keep consistent visual thickness
+        // Small molecules get thicker lineWidth (due to scale), so reduce multiplier
+        // Large molecules get thinner lineWidth, so increase multiplier
+        const targetHighlightPx = 12; // desired highlight thickness in SVG units
+        details.highlightBondWidthMultiplier = Math.max(2, Math.min(10, Math.round(targetHighlightPx / lineWidth)));
       }
       // No atom circle highlights — we use text labels instead
 
