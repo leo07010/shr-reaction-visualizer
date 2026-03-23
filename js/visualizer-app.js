@@ -597,14 +597,14 @@ const VisualizerApp = {
   layoutReaction(steps, doi) {
     if (!steps.length) return;
 
-    const MOL_W = 260;
-    const MOL_H = 260;
+    const MOL_W = 360;
+    const MOL_H = 360;
     const MARGIN = 50;
-    const BOND_PANEL_W = 180;  // width reserved for bond changes panel
-    const GAP = 25;            // gap between molecule and panel
-    const STEP_BLOCK_W = MOL_W + GAP + BOND_PANEL_W + GAP + MOL_W + 40; // ~810
-    const COLS_PER_ROW = 2;
-    const STEP_ROW_H = 460;
+    const BOND_PANEL_W = 200;  // width reserved for bond changes panel
+    const GAP = 30;            // gap between molecule and panel
+    const STEP_BLOCK_W = MOL_W + GAP + BOND_PANEL_W + GAP + MOL_W + 40; // ~1030
+    const COLS_PER_ROW = 1;
+    const STEP_ROW_H = 560;
 
     // ── Title ──
     const isDOI = doi.startsWith('10.');
