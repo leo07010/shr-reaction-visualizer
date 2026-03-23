@@ -51,6 +51,32 @@ border-radius:10px;font-size:15px;cursor:pointer;transition:.2s}
 .stat-card .num{font-size:32px;font-weight:700;color:var(--accent);margin-bottom:4px}
 .stat-card .label{font-size:12px;color:var(--muted);text-transform:uppercase}
 
+/* === Labs & Contributors Section === */
+.labs-section{max-width:1100px;margin:48px auto 40px;padding:0 32px}
+.labs-title{font-size:22px;font-weight:700;color:var(--text);text-align:center;margin-bottom:28px}
+.labs-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}
+.lab-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px;transition:border-color .2s}
+.lab-card:hover{border-color:var(--accent)}
+.lab-header{display:flex;align-items:center;gap:16px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+.lab-logo-link{text-decoration:none;flex-shrink:0}
+.lab-logo-img{width:56px;height:56px;object-fit:contain;border-radius:10px;padding:4px}
+.matter-lab-bg{background:#fff}
+.yudin-lab-bg{background:#1a2744;padding:6px}
+.lab-info h3{font-size:18px;font-weight:700;margin-bottom:2px}
+.lab-info h3 a{color:var(--text);text-decoration:none;transition:color .2s}
+.lab-info h3 a:hover{color:var(--accent)}
+.lab-info p{font-size:13px;color:var(--muted)}
+.lab-members{display:flex;flex-direction:column;gap:8px}
+.member{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-radius:8px;background:rgba(255,255,255,.03);transition:background .15s}
+.member:hover{background:rgba(0,180,216,.06)}
+.member.pi{border-left:3px solid var(--accent)}
+.member-name{font-size:14px;font-weight:600;color:var(--text)}
+.member-role{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+@media(max-width:768px){
+  .labs-grid{grid-template-columns:1fr}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+}
+
 /* === Shared Form Components === */
 .rp-section{display:flex;flex-direction:column;gap:8px}
 .fr-input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);
