@@ -9,6 +9,13 @@ Generated: 2026-03-23
 - **Cause**: RDKit cannot render the trioxolane ring (COOO) with dummy atom `[*]`. The three consecutive oxygens in a ring create valence issues.
 - **Fix needed**: Morgan needs to provide a concrete SMILES with a real substituent (e.g. replace `[R]` with `C` or a specific group).
 
+### Bug 3: Alder ene reaction — incorrect bond data (reported by Yuma)
+- **Affected**: `Alder ene reaction` (Martina), Step 1, Row 21
+- **Issue**: Broken field lists TWO `C=C` breaks, but the SM molecule only has ONE C=C double bond
+- **Current data**: Formed=[C=C, C-C], Broken=[C-H, C=C, C=C]
+- **Expected**: Formed=[C=C, C-C], Broken=[C-H, C=C] (remove one duplicate C=C from Broken)
+- **Fix needed**: Martina needs to correct `Broken 3` field (remove the extra C=C)
+
 ### Bug 2: Bond forming/breaking data appears mixed or excessive
 - **Affected**: Multiple entries where ALL Formed/Broken fields are empty (262 entries, 40% of dataset)
 - **Cause**: When CSV bond data is empty, the system falls back to MCS-based auto-detection which can produce inaccurate or excessive results for complex molecules.
